@@ -681,55 +681,55 @@ program plotms
         niso(1)=2
         prob(1,1)=0.0115
         prob(1,2)=99.9885
-        massiso(1,1)=2.0
-        massiso(1,2)=1.0
+        massiso(1,1)=2.014101 
+        massiso(1,2)=1.007825
   
    !  6 C  (Carbon)
         niso(6)=2
         prob(6,1)=1.07
         prob(6,2)=98.93
-        massiso(6,1)=13.0
-        massiso(6,2)=12.0
+        massiso(6,1)=13.003354
+        massiso(6,2)=12.00
   
    !  7 N  (Nitrogen)
         niso(7)=2
         prob(7,1)=0.368
         prob(7,2)=99.632
-        massiso(7,1)=15.0
-        massiso(7,2)=14.0
+        massiso(7,1)=15.000108
+        massiso(7,2)=14.003074
   
    !  8 O  (Oxygen)
         niso(8)=3
         prob(8,1)=0.038
         prob(8,2)=0.205
         prob(8,3)=99.757
-        massiso(8,1)=17.0
-        massiso(8,2)=18.0
-        massiso(8,3)=16.0
+        massiso(8,1)=16.999131
+        massiso(8,2)=17.999159
+        massiso(8,3)=15.994914
   
    !  9 F  (Fluorine)
         niso(9)=1
         prob(9,1)=100.
-        massiso(9,1)=19.0
+        massiso(9,1)=18.998403
   
   !  13 Al (Aluminium)                                                                                
           niso(13)=1                                                                                  
           prob(13,1)=100.0                                                                            
-          massiso(13,1)=27.0 
+          massiso(13,1)=26.981538
   
-   ! 14 Si (Silica)
+   ! 14 Si (Silicon)
         niso(14)=3
         prob(14,1)=92.223
         prob(14,2)=4.685
         prob(14,3)=3.092
-        massiso(14,1)=28.0
-        massiso(14,2)=29.0
-        massiso(14,3)=30.0
+        massiso(14,1)=27.976926
+        massiso(14,2)=28.976494
+        massiso(14,3)=29.973770
   
    ! 15 P  (Phosphorus)
         niso(15)=1
         prob(15,1)=100.
-        massiso(15,1)=31.0
+        massiso(15,1)=30.973761
   
    ! 16 S  (Sulfur)
         niso(16)=4
@@ -737,10 +737,10 @@ program plotms
         prob(16,2)=0.76
         prob(16,3)=4.29
         prob(16,4)=94.93
-        massiso(16,1)=36.0
-        massiso(16,2)=33.0
-        massiso(16,3)=34.0
-        massiso(16,4)=32.0
+        massiso(16,1)=35.967080
+        massiso(16,2)=32.971458
+        massiso(16,3)=33.967867
+        massiso(16,4)=31.972071
   
    ! 17 Cl (Chlorine) 
         niso(17)=2
