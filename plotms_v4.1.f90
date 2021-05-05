@@ -132,9 +132,10 @@ program plotms
      write(*,*) ' Using small Version'
      small = .True.
   else
-!     xname='~/.mass_jay.agr'
-     xname='~/.mass.agr'
+ !    xname='~/.mass_jay.agr'
+     xname='~/.mass_raw.agr'
   endif
+  
   
   ! fname contains the results from each calculation or the temporary result tmpqceims.res
   ! xname contains the xmgrace plot file
