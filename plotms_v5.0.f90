@@ -3,14 +3,14 @@
 ! Author        : S. Grimme
 ! Co-authors    : J.Koopman, C.Bauer
 ! Contributions : T. Kind (FiehnLab 2013)
-! Version       : 4.1  (Mar 19 2021)
+! Version       : 5.0  (May 17 2021)
 ! Copyright     :
-! Description   : plot mass spectra from QCEIMS
+! Description   : plot mass spectra from QCxMS
 ! ============================================================================
 
 !====================================================================
 !     Original PlotMS Program for extraction of mass spectra
-!     from quantum mechanical simulations used within QCEIMS
+!     from quantum mechanical simulations used within QCxMS
 !
 !                      *********************************************
 !                      *                S. Grimme                  *
@@ -29,10 +29,11 @@
 !
 !====================================================================
 
-
+!!! 5.0: Changing name from QCEIMS to QCxMS !!! 
 
 
 program plotms
+!  use xtb_mctc_accuracy, only:wp
   !treat i,j,k,l,m,n as integers and all other cariables as real
   implicit none
   integer n,i,j,k,kk,kkk,kkkk,nn,ntot,nsig
@@ -56,8 +57,9 @@ program plotms
   real*8 chrg1,chrg2,dum,checksum,cw,score
   real   snorm
   logical ex,sel,echo,exdat,mpop,small
+  logical noIso
   
-  ! fname=<qceims.res> or result file, xname contains the mass.agr plot file
+  ! fname=<qcxms.res> or result file, xname contains the mass.agr plot file
   character*80 arg(10),line,fname,xname
   character*255 atmp
   
@@ -76,6 +78,7 @@ program plotms
   nagrfile=410
   mzmin = 10
   spec = 0
+  noIso = .false.
   
   ! edit this path name to some standard xmgrace plot file
   ! JK changed to universal location/file
@@ -104,11 +107,13 @@ program plotms
   !  -w broadening the charges by an SD 
   !  -s Take only secondary and tertiary fragmentations (give the value, e.g. "-s 2" for secondary)
   !  -m set minimum value for m/z, so 100% value will be calc. for higher values (CID)
+  !  -i calculate NO isotope pattern
   
   do i=1,9
      if(index(arg(i),'-a').ne.0)  cthr=-1000.
      if(index(arg(i),'-p').ne.0)  echo=.true.
      if(index(arg(i),'-f').ne.0)  fname=arg(i+1)
+     if(index(arg(i),'-i').ne.0)  noIso=.true.
      if(index(arg(i),'-t').ne.0) then
         call readl(arg(i+1),xx,nn)
         cthr=xx(1)
@@ -126,31 +131,33 @@ program plotms
         mzmin=int(xx(1))
      endif
   enddo
+
   
-  if(index(arg(1),'-k').ne.0) then
-     xname='~/.mass_jay_klein.agr'
-     write(*,*) ' Using small Version'
-     small = .True.
-  else
- !    xname='~/.mass_jay.agr'
-     xname='~/.mass_raw.agr'
-  endif
+!  if(index(arg(1),'-k').ne.0) then
+!     xname='~/.mass_jay_klein.agr'
+!     write(*,*) ' Using small Version'
+!     small = .True.
+!  else
+! !    xname='~/.mass_jay.agr'
+!     xname='~/.mass_raw.agr'
+!  endif
   
+  xname='~/.mass_raw.agr'
   
-  ! fname contains the results from each calculation or the temporary result tmpqceims.res
+  ! fname contains the results from each calculation or the temporary result tmpqcxms.res
   ! xname contains the xmgrace plot file
   
   if(fname.eq.'')then
-    fname='qceims.res'
+    fname='qcxms.res'
     inquire(file=fname,exist=ex)
     if(ex) spec = 1
     if(.not.ex)then
-      fname='qceims_cid.res'
+      fname='qcxms_cid.res'
       spec = 2
     endif
   
     inquire(file=fname,exist=ex)
-    if(.not.ex) fname='tmpqceims.res' ! not solved yet
+    if(.not.ex) fname='tmpqcxms.res' ! not solved yet
   endif
   
   inquire(file=fname,exist=ex)
@@ -158,11 +165,12 @@ program plotms
   
   write(*,*)
   write(*,*) '*******************************'
-  write(*,*) '* QCEIMS output reader PLOTMS *'
-  write(*,*) '*      V 4.1 Mar 2021        *'
-  write(*,*) '*         S. Grimme           *'
+  write(*,*) '* QCxMS output reader PLOTMS *'
+  write(*,*) '*      V 5.0 May 2021        *'
+  write(*,*) '*         S. Grimme          *'
+  write(*,*) '*         J. Koopman         *'
   write(*,*) '*******************************'
-  write(*,*) 'Contributor: J.Koopman, C.Bauer, T.Kind '
+  write(*,*) 'Contributor:  C.Bauer, T.Kind '
   write(*,*)
   write(*,*) 'xmgrace file body ',trim(xname)
   write(*,*) 'Reading ... ', trim(fname)
@@ -228,7 +236,7 @@ program plotms
        if(io<0) exit !EOF
        if(io>0) stop !fail
   
-     else !not yet decided what to do with tmpqceims
+     else !not yet decided what to do with tmpqcxms
        write(*,*) 'S T O P - Something wrong in plotms - no spec'
        stop
      endif
@@ -264,7 +272,7 @@ program plotms
   ! read it again
   write(*,*) 'Computing ...'
   
-  ! contains qceims.res as standard option
+  ! contains qcxms.res as standard option
   open(unit=1,file=fname)
   imin=100000
   i=1
@@ -314,7 +322,7 @@ program plotms
       checksum=checksum+chrg   !Check total charge
   
   ! compute pattern, nsig signals at masses mass with int mint
-      call isotope(ntot,idum,maxatm,nrnd,rnd,mass,mint,nsig)
+      call isotope(ntot,idum,maxatm,nrnd,rnd,mass,mint,nsig,noIso)
       if(cw.gt.1.d-6)chrg=chrg+cw*chrg*snorm()
          do k=1,nsig
            tmass(mass(k))=tmass(mass(k))+mint(k)*chrg
@@ -462,7 +470,7 @@ program plotms
         else
            if(index(line,'world 10').ne.0)then
               write(line,'(''@    world '',i3,'', 0,'',i3,'', 100'')')imin,imax+5
-           endif
+           endif  
   !         if(index(line,'xaxis  tick major').ne.0)then
   !            line='@    xaxis  tick major 10'
   !!               if(imax.gt.200) line='@    xaxis  tick major 50' 
@@ -515,7 +523,7 @@ program plotms
   open(unit=11, file='result.jdx', STATUS="REPLACE")
   
   ! TK minimum JCAMP-DX header
-  write(11,"(A)")'##TITLE=Theoretical in-silico spectrum (QCEIMS)'
+  write(11,"(A)")'##TITLE=Theoretical in-silico spectrum (QCxMS)'
   write(11,"(A)")'##JCAMP-DX=4.24'
   write(11,"(A)")'##DATA TYPE=MASS SPECTRUM'
   
@@ -660,18 +668,22 @@ program plotms
   ! TK See: ATOMIC WEIGHTS OF THE ELEMENTS: REVIEW 2000 (IUPAC Technical Report)
   ! TK Pure Appl. Chem., Vol. 75, No. 6, pp. 683–800, 2003.
   
-  subroutine isotope(nat,it,maxatm,nrnd,rnd,mass,mint,nsig)
+  subroutine isotope(nat,it,maxatm,nrnd,rnd,mass,mint,nsig,no_isotopes)
   implicit none
+
   integer nat,it(*),nsig,nrnd,maxatm
   integer mass(*)
-  real*8  mint(*)
-  real*8  rnd(maxatm,nrnd)
-  
-  real*8  prob(200,10),massiso(200,10),p1,p2,x,xmass
   integer niso(200)
   integer nmass(10000)
   integer n,i,j,iso,imass,isum,k,iti
+
+  real*8  mint(*)
+  real*8  rnd(maxatm,nrnd)
   real*8 r,xm
+  real*8  prob(200,10),massiso(200,10),p1,p2,x,xmass
+
+  logical no_isotopes
+
   
   niso=0
   prob=0
@@ -683,7 +695,6 @@ program plotms
         prob(1,2)=99.9885
         massiso(1,1)=2.014101 
         massiso(1,2)=1.007825
-  
    !  6 C  (Carbon)
         niso(6)=2
         prob(6,1)=1.07
@@ -1045,28 +1056,51 @@ program plotms
   do i=1,nat
      if(niso(it(i)).eq.0) stop 'internal isotope error 2'
   enddo
-  
-  nmass=0
-  do n=1,nrnd
-  xmass=0
-  do i=1,nat
-     iti=it(i)
-     r=rnd(i,n)
-     p1=0.0
-     p2=prob(iti,1)
-     do iso=1,niso(iti)
-        if(r.ge.p1.and.r.le.p2)then
+
+  !Calculate NO isotope pattern
+  if (no_isotopes.eq..true.)then 
+    nmass=0
+    !do n=1,nrnd
+    xmass=0
+    do i=1,nat
+      iti=it(i)
+      p1=0.0
+      do iso=1,niso(iti)
+         if (prob(iti,iso).gt.p1)then
            x=massiso(iti,iso)
-           exit
-        endif
-        p1=p2
-        p2=p2+prob(iti,iso+1)
-     enddo
-     xmass=xmass+x
-  enddo
-  imass=nint(xmass)                  ! here it gets to integers - changed to nearest int nint
-  nmass(imass)=nmass(imass)+1
-  enddo
+         endif
+         p1=prob(iti,iso)
+      enddo
+      xmass = xmass + x
+    enddo
+    imass=nint(xmass)                  ! here it gets to integers - changed to nearest int nint
+    nmass(imass)=nmass(imass)+1
+    !enddo
+
+  ! Calculate isotope pattern
+  else                      
+    nmass=0
+    do n=1,nrnd
+      xmass=0
+      do i=1,nat
+         iti=it(i)
+         r=rnd(i,n)
+         p1=0.0
+         p2=prob(iti,1)
+         do iso=1,niso(iti)
+            if(r.ge.p1.and.r.le.p2)then
+               x=massiso(iti,iso)
+               exit
+            endif
+            p1=p2
+            p2=p2+prob(iti,iso+1)
+         enddo
+         xmass=xmass+x
+      enddo
+      imass=nint(xmass)                  ! here it gets to integers - changed to nearest int nint
+      nmass(imass)=nmass(imass)+1
+    enddo
+  endif
   
   isum=sum(nmass)
   k=0
