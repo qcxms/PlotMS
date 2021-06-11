@@ -3,7 +3,7 @@
 ! Author        : S. Grimme
 ! Co-authors    : J.Koopman, C.Bauer
 ! Contributions : T. Kind (FiehnLab 2013)
-! Version       : 5.0  (May 17 2021)
+! Version       : 5.0  (Jun 11 2021)
 ! Copyright     :
 ! Description   : plot mass spectra from QCxMS
 ! ============================================================================
@@ -166,7 +166,7 @@ program plotms
   write(*,*)
   write(*,*) '*******************************'
   write(*,*) '* QCxMS output reader PLOTMS *'
-  write(*,*) '*      V 5.0 May 2021        *'
+  write(*,*) '*      V 5.0 Jun 2021        *'
   write(*,*) '*         S. Grimme          *'
   write(*,*) '*         J. Koopman         *'
   write(*,*) '*******************************'
@@ -1411,13 +1411,14 @@ program plotms
     if(tmass(i).ne.0.)numcalc=numcalc+1
   enddo
   
-  !     weighted spectral vectors, m**3, int**0.5 scaling
+  !     weighted spectral vectors, m**3, int**0.5 scaling ! Not sure why 0.5
+  !     weighted spectral vectors, m**3, int**0.6 scaling
   w=0.
     do i=1,10000
     do j=1,10000
        if(j.eq.iexp(1,i)) then
-       w(2,j)=j**2*(100.*tmass(j)/tmax)**0.5
-       w(1,j)=iexp(1,i)**2*iexp(2,i)**0.5
+       w(2,j)=j**2*(100.*tmass(j)/tmax)**0.6
+       w(1,j)=iexp(1,i)**2*iexp(2,i)**0.6
        endif
     enddo
     enddo
