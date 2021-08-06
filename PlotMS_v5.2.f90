@@ -197,7 +197,7 @@ program plotms
   write(*,*)
   write(*,*) '*******************************'
   write(*,*) '* QCxMS output reader PLOTMS *'
-  write(*,*) '*     v. 5.1 Aug 2021        *'
+  write(*,*) '*     v. 5.2 Aug 2021        *'
   write(*,*) '*         S. Grimme          *'
   write(*,*) '*         J. Koopman         *'
   write(*,*) '*******************************'
