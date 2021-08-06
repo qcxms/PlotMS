@@ -3,11 +3,15 @@
  OSTYPE=LINUXI
 #--------------------------------------------------------------------------
 
-OBJS1=plotms_v5.0.o
+OBJS1 = PlotMS_v5.2.o
 
-OBJS2 = 
+OBJS2 = qcxms_boxmuller.o
 
-OBJS = $(OBJS1) $(OBJS2)
+OBJS3 = qcxms_readl.o
+
+OBJS4 = xtb_mctc_accuracy.o 
+
+OBJS = $(OBJS4) $(OBJS3) $(OBJS2) $(OBJS1)
 #--------------------------------------------------------------------------
 
 ifeq ($(OSTYPE),LINUXI)
