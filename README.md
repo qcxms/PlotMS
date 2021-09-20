@@ -17,4 +17,6 @@ The files *qcxms.res* and *qcxms_cid.res* are produced then QCxMS is finished wi
 
 For the older QCEIMS program, use plotms version 4.2
 
+**Documentation**
 
+Find the documentation and other useful information for visualization at the [PlotMS docs](https://xtb-docs.readthedocs.io/en/latest/qcxms_doc/qcxms_plot.html).
