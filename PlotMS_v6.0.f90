@@ -34,7 +34,8 @@
 
 program plotms
   use qcxms_boxmuller, only: vary_energies
-  use xtb_mctc_accuracy, only:wp
+  use qcxms_readcommon
+  use xtb_mctc_accuracy, only: wp
   implicit none
 
  !treat i,j,k,l,m,n as integers and all other variables as real (?!?!)
@@ -43,23 +44,21 @@ program plotms
   integer :: maxatm,imax,imin,nagrfile,spec,io
   integer :: iat  (10000)
   integer :: nat  (10000)
-  integer :: iat_sum (10000)
+  integer :: iat_save (10000)
   integer :: mass (1000)! maximum mass = 10000
-  integer :: isec,jcoll,jsec,ial,jal(0:10),nf,irun,seed,mzmin
-  integer :: total_charge
+  integer :: isec,jcoll,jsec,ial,jal(0:10),nf,irun,mzmin
   ! TK number of peaks in in-silico spectra, needed for JCAMP-DX export
   integer :: numspec
-  integer :: io_spec
+  integer :: io_spec, io_raw, io_mass, io_exp, io_jcamp
 
-  real(wp) ::  iexp (2,10000)
-  real(wp) ::  mint (1000)
-  real(wp) ::  tmass(10000) ! tmass contains abundances (real) for each unit mass (i)
-  real(wp) ::  checksum2(50000)
-
-  ! cthr and cthr contain ions (counts) with different charges
-  ! tmax the maximum abundance factor over the whole spectrum
-  real(wp) :: xx(100),tmax,r,rms,norm,chrg,cthr,cthr2
-  real(wp) :: chrg1,chrg2,dum,checksum,chrg_wdh,score
+  real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
+  real(wp) :: chrg,chrg2,dum,checksum,score
+  real(wp) :: iexp (2,10000)
+  real(wp) :: mint (1000)
+  real(wp) :: tmass(10000) ! tmass contains abundances (real) for each unit mass (i)
+  real(wp) :: checksum2(50000)
+  real(wp) :: chrg_wdth
+  real(wp) :: total_charge
   real(wp),allocatable :: rnd(:,:)
 
   logical  :: sel,echo,exdat,mpop,small
@@ -67,10 +66,9 @@ program plotms
   logical  :: noIso, Plasma
   
   ! fname=<qcxms.res> or result file, xname contains the mass.agr plot file
-  character(len=80)  :: arg(10),line
+  character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
-  character(len=255) :: atmp
 
   mpop          = .false.
   echo          = .false.
@@ -85,8 +83,8 @@ program plotms
  
   !> setup overall (initial) charge as used in QCxMS (has to be set manually)
   cthr          = 1.d-3
-  chrg_wdh      = 0
-  total_charge  = 1
+  chrg_wdth      = 0.0_wp
+  total_charge  = 1.0_wp
   cthr2         = 0.01 ! only used for information, not in program
 
 
@@ -136,7 +134,7 @@ program plotms
      ! set width distr. of boltz sampling
      if(index(arg(i),'-w') /= 0) then
         call readl(arg(i+1),xx,nn)
-        chrg_wdh=xx(1)
+        chrg_wdth=xx(1)
      endif
 
      ! set number of cascading runs
@@ -236,8 +234,8 @@ program plotms
   
   write(*,*) ' '
   ! -w
-  if(chrg_wdh > 0)then
-     write(*,'('' broadening the charges by an SD, wdth :'',f4.1)')chrg_wdh*100.
+  if(chrg_wdth > 0)then
+     write(*,'('' broadening the charges by an SD, wdth :'',f4.1)')chrg_wdth*100.
   endif
   
   ! -s
@@ -251,7 +249,7 @@ program plotms
   endif
 
   ! -c
-  if(total_charge > 0)then ! always (as information)
+  if ( total_charge > 0 ) then ! always (as information)
      write(*,*) 'The total charge of the system is ', total_charge
   endif
 
@@ -275,7 +273,8 @@ program plotms
   
   ! read .res file:
   ! charge(chrg2), trajectory(irun),number of collision event(icoll), numbers of (secondary-)fragments (jsec,nf), 
-  ! no. of different atom types in the fragment (atm_types), atomic number (iat), amount of this atom typ (nat) <== from kk = 1 to k
+  ! no. of different atom types in the fragment (atm_types), atomic number (iat), 
+  ! amount of this atom typ (nat) <== from kk = 1 to k
   
   open ( file=fname, newunit=io_spec, status='old' )
   
@@ -312,6 +311,17 @@ program plotms
   
   !close file
   close(io_spec)
+
+  !seed=42                                                                                     
+  !call random_seed(seed)                                                
+  ! initialize the random number array (efficiency)
+  allocate(rnd(50000,maxatm))  
+  do i = 1, 50000
+    do j = 1, maxatm
+      call random_number(r)
+      rnd(i,j) = r
+    enddo
+  enddo
   
   
   ! read it again
@@ -323,27 +333,8 @@ program plotms
   i         = 1
   ial       = 0
   jal       = 0
-  checksum  = 0
-  checksum2 = 0
-
-
-    !seed=42                                                                                     
-    !call random_seed(seed)                                                
-    !      I do not know why one should really randomize the results             
-    !      so set the seed to 42. Now the pseudo-randomized                     
-    !      computed spectrum (isotope postprocessing) is consistent every time. 
-    !      Before, the score would fluctuate a lot. nrnd=50000 untouched.       
-    !        Christoph Bauer Dec. 16, 2014. 
-
-    ! initialize the random number array (efficiency)
-    allocate(rnd(50000,maxatm))  
-    do i = 1, 50000
-      do j = 1, maxatm
-        call random_number(r)
-        rnd(i,j) = r
-      enddo
-    enddo
-
+  checksum  = 0.0_wp
+  checksum2 = 0.0_wp
 
   do
 
@@ -382,14 +373,15 @@ program plotms
         ! all atoms of this type
         do kkk = 1, nat(kk)
           kkkk = kkkk + 1
-          iat_sum(kkkk) = iat(kk)
+          iat_save(kkkk) = iat(kk)
         enddo
       enddo
+
       checksum = checksum + chrg   !Check total charge
     
       ! compute pattern, nsig signals at masses mass with int mint
-      call isotope (ntot, iat_sum, maxatm, rnd, mass, mint, nsig, noIso)
-      if(chrg_wdh > 1.0d-6) chrg = vary_energies(chrg,chrg_wdh) 
+      call isotope (ntot, iat_save, maxatm, rnd, mass, mint, nsig, noIso)
+      if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
       do atm_types = 1, nsig
         tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * chrg
@@ -402,14 +394,14 @@ program plotms
   
   write(*,*) n,' (charged) fragments done.'
   write(*,*)
-  write(*,*) 'checksum of charge :', checksum
+  write(*,*) 'checksum of charge :', checksum 
   write(*,*)
   
   k=0
   do i = 1, 50000
-     if (abs(checksum2(i) ) > 1.d-6) k = k + 1
+     if ( abs(checksum2(i) ) >  1.0d-6) k = k + 1
   
-     if ( abs(checksum2(i) ) > 1.d-6 .and. abs(checksum2(i) - total_charge ) > 1.d-3)then
+     if ( abs(checksum2(i) ) > 1.0d-6 .and. abs(checksum2(i) - total_charge ) >  1.0d-3)then
         write(*,*) 'checksum error for trj', i,' chrg=',checksum2(i)
      endif
   enddo
@@ -418,10 +410,10 @@ program plotms
   
   write(*,*)
   write(*,*) 'ion sources:'
-  write(*,'(''% inital run'',f6.1)')100.*float(jal(1))/float(ial)
+  write(*,'(''% inital run'',f6.1)') 100.0_wp * float(jal(1)) / float(ial)
   
   do j=2,8
-     write(*,'(''%        '',i1,''th'',f6.1)')j,100.*float(jal(j))/float(ial)
+     write(*,'(''%        '',i1,''th'',f6.1)') j ,100.0_wp * float(jal(j))/float(ial)
   enddo 
   
   write(*,*)
@@ -433,93 +425,98 @@ program plotms
   inquire(file='exp.dat',exist=exdat)
   
   if(exdat) then
-     write(*,*) 'Reading exp.dat ...'
-     open(unit=4,file='exp.dat')
+    write(*,*) 'Reading exp.dat ...'
+    open(file='exp.dat', newunit=io_exp, status='old')
   
-  ! TK (a) is edit descriptor for character strings
-  20 read(4,'(a)',end=200)line
+    !> read the experimental (NIST) file 
+rd: do
+      read(io_exp,'(a)',iostat=iocheck)line
+      if (iocheck < 0) exit
+
   
-  if(index(line,'##MAXY=') /= 0)then
-      line(7:7)=' '
-      call readl(line,xx,nn)
-      norm=xx(nn)/100.0d0
+      if(index(line,'##MAXY=') /= 0)then
+        line(7:7)=' '
+        call readl(line,xx,nn)
+        norm=xx(nn)/100.0_wp
+      endif
+  
+      if(index(line,'##PEAK TABLE') /= 0)then
+        kk=0
+        do
+          read(io_exp,'(a)',iostat=iocheck)line
+          if (iocheck < 0) exit rd
+  
+          ! TK JCAMP DX for MS data has "##END="
+          if(index(line,'##END') /= 0) cycle  
+  
+          do k=1,80
+            if(line(k:k) == ',')line(k:k)=' '
+          enddo
+  
+          call readl(line,xx,nn)
+  
+          do k = 1, nn/2
+             kk = kk + 1
+             iexp(1,kk) = xx(2 * k - 1)
+             iexp(2,kk) = xx(2 * k)
+             if(iexp(1,kk) > imax) imax = iexp(1,kk)
+             if(iexp(1,kk) < imin) imin = iexp(1,kk)
+          enddo
+        enddo
+      endif
+    enddo rd
+  
+    close(io_exp)
   endif
   
-  if(index(line,'##PEAK TABLE') /= 0)then
-      kk=0
-  30  read(4,'(a)',end=200)line
-  
-     ! TK JCAMP DX for MS data has "##END="
-     if(index(line,'##END') /= 0)goto 200
-  
-     do k=1,80
-        if(line(k:k) == ',')line(k:k)=' '
-     enddo
-  
-     call readl(line,xx,nn)
-  
-     do k=1,nn/2
-        kk=kk+1
-        iexp(1,kk)=xx(2*k-1)
-        iexp(2,kk)=xx(2*k)
-        if(iexp(1,kk) > imax) imax=iexp(1,kk)
-        if(iexp(1,kk) < imin) imin=iexp(1,kk)
-     enddo
-     goto 30
-  
-     endif
-     goto 20
-  
-  200 continue
-     close(4)
-  endif
-  
-  imin=max(imin,mzmin)
-  j=0
-  do i=mzmin,10000
-     if(tmass(i) /= 0)j=i
+  imin = max(imin,mzmin)
+  j = 0
+
+  do i = mzmin, 10000
+    if(tmass(i) /= 0) j = i
   enddo
-  imax=max(j,imax)
+
+  imax = max(j,imax)
   
-  tmax=maxval(tmass(mzmin:10000))
+  tmax = maxval(tmass(mzmin:10000))
   
   ! counts of structures in the 100% peak
-  write(*,*)'Theoretical counts in 100 % signal:',idint(tmax)
+  write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
   
   if(echo)then
-  write(*,*)'mass % intensity  counts   Int. exptl'
-  do i=mzmin,10000
-     if(tmass(i) /= 0)then
-        dum=0
-        do j=1,kk
-           if(int(iexp(1,j)) == i)dum=iexp(2,j)
-        enddo
-        write(*,'(i8,F8.2,i8,F8.2)') &
-        i,100.*tmass(i)/tmax,idint(tmass(i)),dum/norm
-     endif
-  enddo
+    write(*,*)'mass % intensity  counts   Int. exptl'
+    do i = mzmin, 10000
+       if (tmass(i) /= 0) then
+          dum = 0
+          do j = 1, kk
+             if(int(iexp(1,j)) == i) dum = iexp(2,j)
+          enddo
+
+          write(*,'(i8,F8.2,i8,F8.2)') &
+          i, 100.0_wp *tmass(i)/tmax, idint(tmass(i)), dum/norm
+       endif
+    enddo
   endif
   
   ! when the template exists
   
-  inquire(file=xname,exist=ex)
+  inquire(file=xname, exist=ex)
   if(ex)then
-     open(unit=2,file=xname)
+     open(file=xname, newunit=io_raw)
    
   ! Original file called .mass_raw.agr
-     if(small == .false.)open(unit=7,file='mass.agr')
-     if(small == .true.)open(unit=7,file='small_mass.agr')
-  !   open(unit=7,file='mass.agr')
+     if(       small ) open( file='small_mass.agr', newunit=io_mass)
+     if( .not. small ) open( file='mass.agr',       newunit=io_mass)
   !   open(unit=9,file='intensities.txt')
   
   ! my xmgrace file mass.agr has nagrfile lines
      write(*,*)
      write(*,*) 'Writing mass.agr ...'
-     do i=1,nagrfile
-        read (2,'(a)')line
-        if(small == .false.)then 
+     do i = 1, nagrfile
+        read (io_raw,'(a)')line
+        if( .not. small )then 
            if(index(line,'world 10') /= 0)then
-              write(line,'(''@    world '',i3,'', -105,'',i3,'', 100'')')imin,imax+5
+              write(line,'(''@    world '',i3,'', -105,'',i3,'', 100'')') imin, imax + 5
            endif
            if(index(line,'xaxis  tick major') /= 0)then
               line='@    xaxis  tick major 20'
@@ -538,7 +535,7 @@ program plotms
         !kleines Format
         else
            if(index(line,'world 10') /= 0)then
-              write(line,'(''@    world '',i3,'', 0,'',i3,'', 100'')')imin,imax+5
+              write(line,'(''@    world '',i3,'', 0,'',i3,'', 100'')') imin, imax + 5
            endif  
   !         if(index(line,'xaxis  tick major') /= 0)then
   !            line='@    xaxis  tick major 10'
@@ -550,17 +547,17 @@ program plotms
   !            if(imax > 200) line='@    s1 symbol size 0.100000'
            endif
         endif
-        write(7,'(a)')line
+        write(io_mass,'(a)')line
      enddo
   
   ! write only masses > mzmin
-     do i=mzmin,10000
+     do i = mzmin, 10000
         if(tmass(i) /= 0)then
-           write(7,*) i,100.*tmass(i)/tmax
+           write(io_mass,*) i, 100.0_wp * tmass(i)/tmax
 !           write(9,*) i,100.*tmass(i)/tmax   !ce50values
         endif
      enddo
-     write(7,*)'&'
+     write(io_mass,*)'&'
   
 !     close(9)
   
@@ -571,12 +568,12 @@ program plotms
   ! TK kk contains number of experimental spectra
   
      if(exdat)then
-       write(7,*)'@target G0.S2'
-       write(7,*)'@type bar'
+       write(io_mass,*)'@target G0.S2'
+       write(io_mass,*)'@type bar'
        do i=1,kk
-          write(7,*) iexp(1,i),-iexp(2,i)/norm
+          write(io_mass,*) iexp(1,i),-iexp(2,i)/norm
        enddo
-       write(7,*)'&'
+       write(io_mass,*)'&'
      endif
   endif
   
@@ -589,26 +586,26 @@ program plotms
   write(*,*) 'Writing JCAMP file: result.jdx ...'
   write(*,*)
   ! TK open file as JCAMP-DX MS result file, open new or replace
-  open(unit=11, file='result.jdx', STATUS="REPLACE")
+  open( file='result.jdx', STATUS="REPLACE", newunit=io_jcamp)
   
   ! TK minimum JCAMP-DX header
-  write(11,"(A)")'##TITLE=Theoretical in-silico spectrum (QCxMS)'
-  write(11,"(A)")'##JCAMP-DX=4.24'
-  write(11,"(A)")'##DATA TYPE=MASS SPECTRUM'
+  write(io_jcamp,"(A)")'##TITLE=Theoretical in-silico spectrum (QCxMS)'
+  write(io_jcamp,"(A)")'##JCAMP-DX=4.24'
+  write(io_jcamp,"(A)")'##DATA TYPE=MASS SPECTRUM'
   
-  !write(11,*)'##MOLFORM=C13 H22 O3 Si2'
-  !write(11,*)'##MW=282'
-  write(11,"(A)")'##XUNITS=M/Z'
-  write(11,"(A)")'##YUNITS=RELATIVE INTENSITY'
-  !write(11,*)'##XFACTOR=1'
-  !write(11,*)'##YFACTOR=1'
-  !write(11,*)'##FIRSTX=15'
-  !write(11,*)'##LASTX=281'
-  !write(11,*)'##FIRSTY=20'
-  !write(11,*)'##MAXX=281'
-  !write(11,*)'##MINX=15'
-  !write(11,*)'##MAXY=9999'
-  !write(11,*)'##MINY=10'
+  !write(io_jcamp,*)'##MOLFORM=C13 H22 O3 Si2'
+  !write(io_jcamp,*)'##MW=282'
+  write(io_jcamp,"(A)")'##XUNITS=M/Z'
+  write(io_jcamp,"(A)")'##YUNITS=RELATIVE INTENSITY'
+  !write(io_jcamp,*)'##XFACTOR=1'
+  !write(io_jcamp,*)'##YFACTOR=1'
+  !write(io_jcamp,*)'##FIRSTX=15'
+  !write(io_jcamp,*)'##LASTX=281'
+  !write(io_jcamp,*)'##FIRSTY=20'
+  !write(io_jcamp,*)'##MAXX=281'
+  !write(io_jcamp,*)'##MINX=15'
+  !write(io_jcamp,*)'##MAXY=9999'
+  !write(io_jcamp,*)'##MINY=10'
   
   ! TK calculate number of in-silico spectra
   ! TK new: numspec = idint(tmax) ** not related to number ofr spectral peaks
@@ -620,37 +617,37 @@ program plotms
   enddo
   
   
-  write(11,'(A, I0)')'##NPOINTS=' ,numspec
+  write(io_jcamp,'(A, I0)')'##NPOINTS=' ,numspec
   
   ! TK ##XYDATA=(XY..XY) 1 designates one line per m/z abd pair
   ! TK separated by comma
   ! TK 1.500000e+001 ,5.000000e+000
   
-  write(11,"(A)")'##PEAK TABLE=(XY..XY) 1'
+  write(io_jcamp,"(A)")'##PEAK TABLE=(XY..XY) 1'
   !15,20 26,10 27,20 29,50
   
   
   do i=10,10000
        if(tmass(i) /= 0)then
          ! unit mass to exact mass
-         ! write(11,"(I4, I8)") i, int(100.*tmass(i)/tmax)
-         write(11,"(F12.6, I8)") real(i), int(100.*tmass(i)/tmax)
+         ! write(io_jcamp,"(I4, I8)") i, int(100.*tmass(i)/tmax)
+         write(io_jcamp,"(F12.6, I8)") real(i), int(100.0_wp * tmass(i)/tmax)
        endif
   enddo
   
-  write(11,"(A)")'##END='
+  write(io_jcamp,"(A)")'##END='
   
   ! TK close the JCAMP-DX file
-  close(11)
+  close(io_jcamp)
   
  ! compute deviation exp-theor.
   
   if(exdat)then
 
-    rms=0
-    nn=0
-    kkk=0
-    kkkk=0
+    rms  = 0
+    nn   = 0
+    kkk  = 0
+    kkkk = 0
 
     do i = 1, kk
       k = iexp(1,i)
@@ -668,16 +665,16 @@ program plotms
   endif
   
   close(io_spec)
-  close(2)
-  close(3)
-  close(7)
+  close(io_raw)
+  close(io_mass)
+  close(io_jcamp)
   
   ! compute mass spectral match score                                                                 
   if(exdat)then                                                                                 
-  score=0.                                                                                      
-  ! bring iexp to the right order of magnitude                                                        
-    do i=1,10000                                                                                  
-      iexp(2,i)=iexp(2,i)/norm                                                                    
+    score = 0.0_wp                                                                                 
+    ! bring iexp to the right order of magnitude                                                        
+    do i = 1, 10000
+      iexp(2,i) = iexp(2,i) / norm                                                                    
     enddo                                                                                         
                                                                                                   
     call match(tmass,iexp,score,tmax)                                                             
@@ -707,10 +704,10 @@ subroutine match2(tmass,iexp,score,alpha)
   use xtb_mctc_accuracy, only: wp
   implicit none
 
-  integer  :: i,j,k
+  integer  :: i,j
 
   real(wp) :: tmass(10000)
-  real(wp) :: int_exp(10000)
+!  real(wp) :: int_exp(10000)
   real(wp) :: iexp(2,10000)
   real(wp) :: score
   real(wp) :: alpha
@@ -731,17 +728,17 @@ subroutine match2(tmass,iexp,score,alpha)
   norm_experiment = 0.0d0
   norm_calculation = 0.0d0
   overlap = 0.0d0
-  do i=1,10000
-     do j=1,10000
-         norm_experiment = norm_experiment + (-1)**(i+j)*iexp(2,j)*iexp(2,i)*exp(-alpha*(i-j)**2)
-         norm_calculation = norm_calculation + (-1)**(i+j)*tmass(j)*tmass(i)*exp(-alpha*(i-j)**2)
-         overlap = overlap + (-1)**(i+j)*iexp(2,j)*tmass(i)*exp(-alpha*(i-j)**2)
-     enddo
+  do i = 1, 10000
+    do j = 1, 10000
+      norm_experiment = norm_experiment + (-1)**(i+j) * iexp(2,j) * iexp(2,i) * exp(-alpha*(i-j)**2)
+      norm_calculation = norm_calculation + (-1)**(i+j) * tmass(j) * tmass(i) * exp(-alpha*(i-j)**2)
+      overlap = overlap + (-1)**(i+j) * iexp(2,j) * tmass(i) * exp(-alpha * (i-j)**2)
+    enddo
   enddo
   
-  score = overlap/sqrt(norm_experiment*norm_calculation)
+  score = overlap / sqrt(norm_experiment * norm_calculation)
   
-  end subroutine match2
+end subroutine match2
  
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -749,7 +746,7 @@ subroutine match(tmass,iexp,score,tmax)
   use xtb_mctc_accuracy, only: wp
   implicit none
 
-  integer :: i,j,k
+  integer :: i,j
   integer :: pp !peak pair number pp
   integer :: numcalc ! number of calculated peaks
 
@@ -792,10 +789,10 @@ subroutine match(tmass,iexp,score,tmax)
      w(2,i) = w(2,i) / norm(2)
   enddo
   
-  dot  =0.0_wp
-  sum1 =0.0_wp
-  sum2 =0.0_wp
-  sum3 =0.0_wp
+  dot  =  0.0_wp
+  sum1 =  0.0_wp
+  sum2 =  0.0_wp
+  sum3 =  0.0_wp
 
   do i = 1, 10000
      sum1 = sum1 + w(1,i) * w(2,i)

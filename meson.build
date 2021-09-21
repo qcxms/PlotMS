@@ -13,10 +13,11 @@ project('PlotMS',
 )
 
 srcs = ['PlotMS_v6.0.f90',
-       'plotms_isotopes.f90',
-       'qcxms_boxmuller.f90',
-       'qcxms_readl.f90',
-       'xtb_mctc_accuracy.f90'
+       'isotopes.f90',
+       'boxmuller.f90',
+       'readcommon.f90',
+       'readl.f90',
+       'accuracy.f90'
        ]
 
 #plotms_exe = executable(
