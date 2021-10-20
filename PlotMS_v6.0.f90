@@ -46,20 +46,24 @@ program plotms
   integer :: nat  (10000)
   integer :: iat_save (10000)
   integer :: mass (1000)! maximum mass = 10000
-  integer :: isec,jcoll,jsec,ial,jal(0:10),nf,irun,mzmin
+  integer :: isec,jcoll,jsec,ial,jal(0:10),kal(0:30),nf,irun,mzmin
   ! TK number of peaks in in-silico spectra, needed for JCAMP-DX export
   integer :: numspec
   integer :: io_spec, io_raw, io_mass, io_exp, io_jcamp
+  integer :: counter
+  integer :: z_chrg
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
   real(wp) :: chrg,chrg2,dum,checksum,score
   real(wp) :: iexp (2,10000)
   real(wp) :: mint (1000)
   real(wp) :: tmass(10000) ! tmass contains abundances (real) for each unit mass (i)
-  real(wp) :: checksum2(50000)
   real(wp) :: chrg_wdth
   real(wp) :: total_charge
+  real(wp) :: checksum2(50000)
+  real(wp),allocatable :: exact_intensity(:,:)
   real(wp),allocatable :: rnd(:,:)
+!  real(wp),allocatable :: checksum2(:)
 
   logical  :: sel,echo,exdat,mpop,small
   logical  :: ex,ex1,ex2,ex3,ex4
@@ -83,9 +87,11 @@ program plotms
  
   !> setup overall (initial) charge as used in QCxMS (has to be set manually)
   cthr          = 1.d-3
-  chrg_wdth      = 0.0_wp
+  chrg_wdth     = 0.0_wp
   total_charge  = 1.0_wp
   cthr2         = 0.01 ! only used for information, not in program
+
+  z_chrg = 1
 
 
  ! edit this path name to some standard xmgrace plot file
@@ -99,7 +105,6 @@ program plotms
   ! start loop reading arguments
   do i=1,9
      arg(i)=' '
-  !   call getarg(i,arg(i))
     call get_command_argument(i,arg(i))
   enddo
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -249,13 +254,13 @@ program plotms
   endif
 
   ! -c
-  if ( total_charge > 0 ) then ! always (as information)
-     write(*,*) 'The total charge of the system is ', total_charge
-  endif
+  !if ( total_charge > 0 ) then ! always (as information)
+  !   write(*,*) 'The total charge of the system is ', total_charge
+  !endif
 
   ! -t (choose if unity intensities or normal)
   if(cthr >= 0)then
-     write(*,'('' couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
+   !  write(*,'('' couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
   else
      write(*,'('' counting all fragments with unity charge (frag. overview)'')')
   endif
@@ -280,30 +285,47 @@ program plotms
   
   do
     if (spec == 1) then    !EI
-       read(io_spec,*,iostat=io) chrg2, irun, jsec, nf, atm_types, (iat(kk),nat(kk), kk = 1, atm_types)
-       if(io<0) exit !EOF
-       if(io>0) stop 'Fail in read' !fail
+      read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jsec, nf, atm_types, (iat(kk),nat(kk), kk = 1, atm_types)
+      if(io<0) exit !EOF
+      if(io>0) stop 'Fail in read' !fail
   
     elseif(spec == 2) then !CID
-       read(io_spec,*,iostat=io) chrg2, irun, jcoll, jsec, nf, atm_types, (iat(kk), nat(kk), kk = 1, atm_types)
-       if(io<0) exit !EOF
-       if(io>0) stop !fail
+      read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jcoll, jsec, nf, atm_types, (iat(kk), nat(kk), kk = 1, atm_types)
+      if(io<0) exit !EOF
+      if(io>0) stop !fail
 
-     else 
-       write(*,*) 'S T O P - Something wrong in plotms - no spec'
-       stop
-     endif
+    else 
+      write(*,*) 'S T O P - Something wrong in plotms - no spec'
+      stop
+    endif
+
+
   
-     if (isec > 0 .and. isec /= jsec) cycle !check tertiary,etc fragmentation (isec)
+    if (isec > 0 .and. isec /= jsec) cycle !check tertiary,etc fragmentation (isec)
   
-     if (chrg2 > cthr) then  !default: chrg2 > 0.001
+    if ( z_chrg > 0 ) then
+      if (chrg2 > cthr) then  !default: chrg2 > 0.001
         ntot = sum(nat(1:atm_types))
-        if(ntot > maxatm) maxatm = ntot  !get highest number of atoms in fragment
-     endif
-  
-     i=i+1 !count number of single fragments with charge > chrt
+        if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
+        if ( z_chrg > int(total_charge) ) total_charge = real( z_chrg, wp )
+      endif
+    elseif ( z_chrg < 0 ) then
+      if (chrg2 < -1*cthr) then  !default: chrg2 > 0.001
+        ntot = sum(nat(1:atm_types))
+        if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
+        if ( z_chrg < int(total_charge) ) total_charge = real( z_chrg, wp )
+      endif
+
+    endif
+
+    i = i + 1 !count number of single fragments with charge > chrt
   
   enddo
+
+  write(*,*) 'The maximum charge of the system is ', total_charge
+
+  !> allocate the variables
+!  allocate (checksum2(irun))
 
   n = i - 1  ! n = no. of fragments with amount maxatm of atoms
   
@@ -331,20 +353,26 @@ program plotms
   open ( file=fname, newunit=io_spec, status='old')
   imin=100000
   i         = 1
+  counter   = 0
   ial       = 0
   jal       = 0
+  kal       = 0
   checksum  = 0.0_wp
   checksum2 = 0.0_wp
 
   do
 
+    counter = counter + 1
+!    write(*,*) 'COUNTER', counter
+
+    !> read the fragment entry from qcxms.res line by line
     if (spec == 1) then    !EI
-       read(io_spec,*,iostat=io) chrg2, irun, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
+       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
        if(io<0) exit !EOF
        if(io>0) stop !fail
   
     elseif(spec == 2) then !CID
-       read(io_spec,*,iostat=io) chrg2, irun, jcoll, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
+       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jcoll, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
        if(io<0) exit !EOF
        if(io>0) stop !fail
 
@@ -352,20 +380,41 @@ program plotms
   
     sel = .false.
     chrg = chrg2
-    checksum2(irun) = checksum2(irun) + chrg2 !Check if charge sums up to 1
 
+    !> sum up the charges
+    checksum2(irun) = checksum2(irun) + chrg2
+
+    !> manual setting (see above)
     if ( cthr < 0 ) chrg = total_charge
 
-    if ( chrg > cthr ) then   ! default: yes
-       sel = .true.
-       ial = ial + 1              !count total amount of fragmentations
-       jal(jsec) = jal(jsec) + 1  !count amount of first, sec., tert., ... fragmentations
+    !> count the moment where fragments were created (first/second MD or collision...)
+    !if ( (z_chrg > 0 .and. chrg > cthr) .or. (z_chrg < 0 .and. chrg < -1* cthr) ) then   ! default: yes
+    if ( abs(chrg) > cthr )  then   ! default: yes
+      sel = .true.
+      ial = ial + 1              !count total amount of fragmentations
+      jal(jsec) = jal(jsec) + 1  !count amount of first, sec., tert., ... fragmentations
+
+      !> if not fragmented (i.e. smaller/larger than total_charge) count it to kal(1)
+      !if ( abs(chrg) < abs(total_charge) ) then
+      !  kal(jcoll) = kal(jcoll) + 1 !count the collisions
+      !else
+      !  kal(1) = kal(jcoll) + 1     !no fragmentation
+      !endif
+
+      if ( chrg == total_charge ) then
+        kal(1)     = kal(1) + 1 !count the collisions
+      else
+        kal(jcoll) = kal(jcoll) + 1     !no fragmentation
+      endif
+
     endif
     !----
     if ( isec > 0 .and. isec /= jsec ) sel = .false.  !Only if asked, not default
     !----
 
+    !> get the specifics of the current fragment entry
     if ( sel ) then ! default
+      ! sum all atoms of all types (total atoms)
       ntot = sum(nat(1:atm_types))
       ! all types of atoms
       kkkk = 0
@@ -373,21 +422,21 @@ program plotms
         ! all atoms of this type
         do kkk = 1, nat(kk)
           kkkk = kkkk + 1
-          iat_save(kkkk) = iat(kk)
+          iat_save(kkkk) = iat(kk) 
         enddo
       enddo
 
       checksum = checksum + chrg   !Check total charge
     
       ! compute pattern, nsig signals at masses mass with int mint
-      call isotope (ntot, iat_save, maxatm, rnd, mass, mint, nsig, noIso)
+      !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, exact_intensity, nsig, noIso)
+      call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, noIso)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
       do atm_types = 1, nsig
-        tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * chrg
+        tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
       enddo
 
-      i = i + 1
     endif
 
   enddo 
@@ -398,12 +447,12 @@ program plotms
   write(*,*)
   
   k=0
+  !> count absolute values larger than 1e-6
   do i = 1, 50000
-     if ( abs(checksum2(i) ) >  1.0d-6) k = k + 1
-  
-     if ( abs(checksum2(i) ) > 1.0d-6 .and. abs(checksum2(i) - total_charge ) >  1.0d-3)then
-        write(*,*) 'checksum error for trj', i,' chrg=',checksum2(i)
-     endif
+    if ( abs(checksum2(i) ) >  1.0d-6) k = k + 1
+    if ( abs(checksum2(i) ) > 1.0d-6 .and. abs(checksum2(i) - total_charge ) >  1.0d-3)then
+      write(*,*) 'checksum error for trj', i,' chrg=',checksum2(i)
+    endif
   enddo
   
   write(*,*) k,' successfull runs.'
@@ -415,10 +464,20 @@ program plotms
   do j=2,8
      write(*,'(''%        '',i1,''th'',f6.1)') j ,100.0_wp * float(jal(j))/float(ial)
   enddo 
+
+  write(*,*)
+  write(*,'(''% collisions '',f6.1)') 100.0_wp * float(kal(1)) / float(ial)
+  
+  do j=2,16
+     write(*,'(''%        '',i2,''th'',f6.1)') j ,100.0_wp * float(kal(j))/float(ial)
+  enddo 
   
   write(*,*)
-  
-  ! read exp.
+
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! read the provided experimental file (exp.dat) 
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   imax=0
   imin=0
   
@@ -431,7 +490,7 @@ program plotms
     !> read the experimental (NIST) file 
 rd: do
       read(io_exp,'(a)',iostat=iocheck)line
-      if (iocheck < 0) exit
+      if (iocheck < 0) exit rd
 
   
       if(index(line,'##MAXY=') /= 0)then
@@ -468,12 +527,13 @@ rd: do
   
     close(io_exp)
   endif
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   
   imin = max(imin,mzmin)
   j = 0
 
   do i = mzmin, 10000
-    if(tmass(i) /= 0) j = i
+    if ( tmass(i) /= 0 ) j = i
   enddo
 
   imax = max(j,imax)
@@ -482,7 +542,8 @@ rd: do
   
   ! counts of structures in the 100% peak
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
-  
+ 
+  !> verbose information
   if(echo)then
     write(*,*)'mass % intensity  counts   Int. exptl'
     do i = mzmin, 10000
@@ -770,7 +831,7 @@ subroutine match(tmass,iexp,score,tmax)
     do i = 1, 10000
       do j = 1, 10000
         if ( j == iexp(1, i) ) then
-          w(2,j) = j**2 * ( 100.0_wp * tmass(j) / tmax )**0.6_wp
+          w(2,j) = j**2 * ( 1000.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
           w(1,j) = iexp(1,i)**2 * iexp(2,i)**0.6_wp
         endif
       enddo
