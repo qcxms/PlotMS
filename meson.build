@@ -15,6 +15,7 @@ project('PlotMS',
 srcs = ['PlotMS_v6.0.f90',
        'isotopes.f90',
        'boxmuller.f90',
+       'bucket.f90',
        'readcommon.f90',
        'readl.f90',
        'accuracy.f90'

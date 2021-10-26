@@ -16,7 +16,7 @@
 !!                      *                S. Grimme                  *
 !                      * Mulliken Center for Theoretical Chemistry *
 !                      *             Universitaet Bonn             *
-!                      *                  2008-21                  *
+!                      *                  2008-22                  *
 !                      *********************************************
 !
 !     Please cite as:
@@ -33,13 +33,14 @@
 
 
 program plotms
+  use bucket, only: check_bucket
   use qcxms_boxmuller, only: vary_energies
   use qcxms_readcommon
   use xtb_mctc_accuracy, only: wp
   implicit none
 
  !treat i,j,k,l,m,n as integers and all other variables as real (?!?!)
-  integer :: n,i,j,k,kk,kkk,kkkk,nn,ntot,nsig
+  integer :: n,m,i,j,k,kk,kkk,kkkk,nn,ntot,nsig
   integer :: atm_types
   integer :: maxatm,imax,imin,nagrfile,spec,io
   integer :: iat  (10000)
@@ -47,11 +48,14 @@ program plotms
   integer :: iat_save (10000)
   integer :: mass (1000)! maximum mass = 10000
   integer :: isec,jcoll,jsec,ial,jal(0:10),kal(0:30),nf,irun,mzmin
+  integer :: maxrun
   ! TK number of peaks in in-silico spectra, needed for JCAMP-DX export
   integer :: numspec
   integer :: io_spec, io_raw, io_mass, io_exp, io_jcamp
   integer :: counter
   integer :: z_chrg
+  integer :: cc, cnew
+  integer :: amount
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
   real(wp) :: chrg,chrg2,dum,checksum,score
@@ -60,14 +64,17 @@ program plotms
   real(wp) :: tmass(10000) ! tmass contains abundances (real) for each unit mass (i)
   real(wp) :: chrg_wdth
   real(wp) :: total_charge
-  real(wp) :: checksum2(50000)
-  real(wp),allocatable :: exact_intensity(:,:)
-  real(wp),allocatable :: rnd(:,:)
-!  real(wp),allocatable :: checksum2(:)
+  real(wp) :: check_mass, unique
+  real(wp) :: list_masses(1000)
+  real(wp) :: xmass
+  real(wp), allocatable :: exact_intensity(:,:)
+  real(wp), allocatable :: rnd(:,:)
+  real(wp), allocatable :: checksum2(:), save_mass(:)!, unique(:)
 
   logical  :: sel,echo,exdat,mpop,small
   logical  :: ex,ex1,ex2,ex3,ex4
   logical  :: noIso, Plasma
+  logical  :: mask
   
   ! fname=<qcxms.res> or result file, xname contains the mass.agr plot file
   character(len=80)  :: arg(10)
@@ -223,10 +230,10 @@ program plotms
   
   write(*,*)
   write(*,*) '*******************************'
-  write(*,*) '* QCxMS output reader PLOTMS *'
-  write(*,*) '*     v. 6.0 Sep 2021        *'
-  write(*,*) '*         S. Grimme          *'
-  write(*,*) '*         J. Koopman         *'
+  write(*,*) '* QCxMS output reader PLOTMS  *'
+  write(*,*) '*     v. 6.0 Oct 2021         *'
+  write(*,*) '*         S. Grimme           *'
+  write(*,*) '*         J. Koopman          *'
   write(*,*) '*******************************'
   write(*,*) 'Contributor:  C.Bauer, T.Kind '
   write(*,*)
@@ -269,21 +276,26 @@ program plotms
   
   ! ------------------------------------------------------------------------------------------------------!
   tmass = 0
-  
-  
-  
-  ! read file once
+  maxrun = 0
   i=1
   maxatm=0
-  
-  ! read .res file:
+  counter = 0
+  ! ------------------------------------------------------------------------------------------------------!
+ 
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! read .res file for the first time:
   ! charge(chrg2), trajectory(irun),number of collision event(icoll), numbers of (secondary-)fragments (jsec,nf), 
   ! no. of different atom types in the fragment (atm_types), atomic number (iat), 
   ! amount of this atom typ (nat) <== from kk = 1 to k
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   
   open ( file=fname, newunit=io_spec, status='old' )
-  
+    
   do
+
+    counter = counter + 1
+    !write(*,*) 'COUNTER', counter
+
     if (spec == 1) then    !EI
       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jsec, nf, atm_types, (iat(kk),nat(kk), kk = 1, atm_types)
       if(io<0) exit !EOF
@@ -292,7 +304,7 @@ program plotms
     elseif(spec == 2) then !CID
       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jcoll, jsec, nf, atm_types, (iat(kk), nat(kk), kk = 1, atm_types)
       if(io<0) exit !EOF
-      if(io>0) stop !fail
+      if(io>0) stop 'Fail in read' !fail
 
     else 
       write(*,*) 'S T O P - Something wrong in plotms - no spec'
@@ -300,7 +312,6 @@ program plotms
     endif
 
 
-  
     if (isec > 0 .and. isec /= jsec) cycle !check tertiary,etc fragmentation (isec)
   
     if ( z_chrg > 0 ) then
@@ -319,13 +330,17 @@ program plotms
     endif
 
     i = i + 1 !count number of single fragments with charge > chrt
+    if ( irun > maxrun ) maxrun = irun !save highest run number
   
   enddo
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   write(*,*) 'The maximum charge of the system is ', total_charge
 
   !> allocate the variables
-!  allocate (checksum2(irun))
+  allocate (checksum2(maxrun), &
+    &       save_mass(counter))
+!    &       unique(counter))
 
   n = i - 1  ! n = no. of fragments with amount maxatm of atoms
   
@@ -359,11 +374,14 @@ program plotms
   kal       = 0
   checksum  = 0.0_wp
   checksum2 = 0.0_wp
+  save_mass = 0.0_wp
+  amount    = 0
+  list_masses = 0.0_wp
 
   do
 
     counter = counter + 1
-!    write(*,*) 'COUNTER', counter
+    !write(*,*) 'COUNTER', counter
 
     !> read the fragment entry from qcxms.res line by line
     if (spec == 1) then    !EI
@@ -377,6 +395,7 @@ program plotms
        if(io>0) stop !fail
 
     endif
+
   
     sel = .false.
     chrg = chrg2
@@ -401,10 +420,13 @@ program plotms
       !  kal(1) = kal(jcoll) + 1     !no fragmentation
       !endif
 
-      if ( chrg == total_charge ) then
-        kal(1)     = kal(1) + 1 !count the collisions
-      else
-        kal(jcoll) = kal(jcoll) + 1     !no fragmentation
+      !> count the collision at which most framentation occured
+      if ( spec == 2 ) then
+        if ( chrg == total_charge ) then
+          kal(1)     = kal(1) + 1 !count the collisions
+        else
+          kal(jcoll) = kal(jcoll) + 1     !no fragmentation
+        endif
       endif
 
     endif
@@ -428,19 +450,42 @@ program plotms
 
       checksum = checksum + chrg   !Check total charge
     
-      ! compute pattern, nsig signals at masses mass with int mint
+      !> compute pattern, nsig signals at masses mass with int mint
       !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, exact_intensity, nsig, noIso)
-      call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, noIso)
+      call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, noIso, xmass)
+      !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, noIso, save_mass)
+
+      call check_bucket(xmass, list_masses, amount, counter)
+      save_mass(counter) = xmass
+
+      !!> distribute charge (if set as input)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
+      !> calculate the total mass
       do atm_types = 1, nsig
         tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
       enddo
 
     endif
 
-  enddo 
-  
+  enddo
+
+  do i = 1, amount
+    write(*,*) list_masses(i)
+  enddo
+
+  !call count_bucket(counter, save_mass, list_mass, amount)
+  !mint(k) = save_mass(k) / sum(save_mass)
+
+  !!> distribute charge (if set as input)
+  !if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
+
+  !> calculate the total mass
+  !do atm_types = 1, nsig
+  !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
+  !enddo
+ 
+  !> write out the sum of charges
   write(*,*) n,' (charged) fragments done.'
   write(*,*)
   write(*,*) 'checksum of charge :', checksum 
@@ -448,7 +493,7 @@ program plotms
   
   k=0
   !> count absolute values larger than 1e-6
-  do i = 1, 50000
+  do i = 1, maxrun 
     if ( abs(checksum2(i) ) >  1.0d-6) k = k + 1
     if ( abs(checksum2(i) ) > 1.0d-6 .and. abs(checksum2(i) - total_charge ) >  1.0d-3)then
       write(*,*) 'checksum error for trj', i,' chrg=',checksum2(i)
@@ -465,12 +510,14 @@ program plotms
      write(*,'(''%        '',i1,''th'',f6.1)') j ,100.0_wp * float(jal(j))/float(ial)
   enddo 
 
-  write(*,*)
-  write(*,'(''% collisions '',f6.1)') 100.0_wp * float(kal(1)) / float(ial)
-  
-  do j=2,16
-     write(*,'(''%        '',i2,''th'',f6.1)') j ,100.0_wp * float(kal(j))/float(ial)
-  enddo 
+  if ( spec == 2 ) then
+    write(*,*)
+    write(*,'(''% collisions '',f6.1)') 100.0_wp * float(kal(1)) / float(ial)
+    
+    do j=2,16
+       write(*,'(''%        '',i2,''th'',f6.1)') j ,100.0_wp * float(kal(j))/float(ial)
+    enddo 
+  endif
   
   write(*,*)
 
@@ -528,13 +575,15 @@ rd: do
     close(io_exp)
   endif
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  
-  imin = max(imin,mzmin)
+ 
+  !> get the minimum m/z value that is to be plotted
   j = 0
-
+  !>> sum the total mass only over all values higher than provided (default: 10) 
   do i = mzmin, 10000
     if ( tmass(i) /= 0 ) j = i
   enddo
+
+  imin = max(imin,mzmin)
 
   imax = max(j,imax)
   
@@ -574,7 +623,7 @@ rd: do
      write(*,*)
      write(*,*) 'Writing mass.agr ...'
      do i = 1, nagrfile
-        read (io_raw,'(a)')line
+        read (io_raw,'(a)') line
         if( .not. small )then 
            if(index(line,'world 10') /= 0)then
               write(line,'(''@    world '',i3,'', -105,'',i3,'', 100'')') imin, imax + 5
@@ -730,24 +779,24 @@ rd: do
   close(io_mass)
   close(io_jcamp)
   
-  ! compute mass spectral match score                                                                 
-  if(exdat)then                                                                                 
-    score = 0.0_wp                                                                                 
-    ! bring iexp to the right order of magnitude                                                        
+  ! compute mass spectral match score
+  if(exdat)then 
+    score = 0.0_wp
+    ! bring iexp to the right order of magnitude 
     do i = 1, 10000
-      iexp(2,i) = iexp(2,i) / norm                                                                    
-    enddo                                                                                         
-                                                                                                  
-    call match(tmass,iexp,score,tmax)                                                             
+      iexp(2,i) = iexp(2,i) / norm
+ enddo
+
+    call match(tmass,iexp,score,tmax)
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
     write(*,'(6F10.3)') score   
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)
-    write(*,*)"Composite match score, see "                                                       
+    write(*,*)"Composite match score, see "
     write(*,*)"Stein, S. E.; Scott, D. R. J. Am. Soc. Mass Spectrom. 1994, 5, 859-866" 
-    write(*,*)"For our implementation, see "                                                      
+    write(*,*)"For our implementation, see "
     write(*,*)"Bauer, C. A.; Grimme,S. J. Phys. Chem. A 2014, 118, 11479-11484"
     
     ! Overlap score tried...but failes

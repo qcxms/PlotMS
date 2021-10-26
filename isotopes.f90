@@ -10,7 +10,8 @@
   ! TK See: ATOMIC WEIGHTS OF THE ELEMENTS: REVIEW 2000 (IUPAC Technical Report)
   ! TK Pure Appl. Chem., Vol. 75, No. 6, pp. 683800, 2003.
   
-subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_isotopes)
+subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_isotopes, &
+    xmass )
   use xtb_mctc_accuracy, only: wp
   implicit none
 
@@ -30,7 +31,7 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
 !  real(wp), allocatable :: exc_intens(:,:)
 
   real(wp) :: exc_mass(100)
-  real(wp) :: save_mass(nrnd)
+  real(wp) :: save_mass(counter)
   real(wp) :: newmass
 
   logical  :: no_isotopes
@@ -410,7 +411,7 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
   !  endif
   !enddo
  
-  ! if number of isotopes == 0 <- often errors if wrong .res file is read (is (hopefully) fixed)
+  !> if number of isotopes == 0 <- often errors if wrong .res file is read (is (hopefully) fixed)
   do i=1,ntot
     if(niso(iat_save(i)) == 0) stop 'internal isotope error 2'
   enddo
@@ -465,7 +466,7 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
       imass = nint(xmass)                  ! here it gets to integers - changed to nearest int nint
       nmass(imass) = nmass(imass) + 1
 
-      save_mass(n) = xmass
+      !save_mass(n) = xmass
 
 
       !do j = 1, cnt
@@ -480,13 +481,15 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
     enddo
   endif
 
-  newmass = 0.0_wp
-  mat_mass = minloc(save_mass,1) !, mask = min(save_mass))! > newmass)
+  !newmass = 0.0_wp
+  !mat_mass = minloc(save_mass,1) !, mask = min(save_mass))! > newmass)
+  !save_mass(counter) = xmass
 
-  !write(*,*) save_mass(mat_mass)
 
-  !write(*,*) save_mass
-  !write(*,*) exc_mass
+  !if ( save_mass(nrnd) /= xmass) then
+  !  write(*,*) 'smass', save_mass(nrnd)
+  !  write(*,*) counter, xmass
+  !endif
   
   isum = sum(nmass)
   k = 0
