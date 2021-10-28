@@ -55,7 +55,8 @@ program plotms
   integer :: counter
   integer :: z_chrg
   integer :: cc, cnew
-  integer :: amount
+  integer :: index_mass, mass_index
+  integer :: intensity(1000)
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
   real(wp) :: chrg,chrg2,dum,checksum,score
@@ -67,9 +68,12 @@ program plotms
   real(wp) :: check_mass, unique
   real(wp) :: list_masses(1000)
   real(wp) :: xmass
-  real(wp), allocatable :: exact_intensity(:,:)
+  real(wp) :: jay
+  real(wp), allocatable :: pk_tmass(:)
+  real(wp), allocatable :: exact_intensity(:)
   real(wp), allocatable :: rnd(:,:)
   real(wp), allocatable :: checksum2(:), save_mass(:)!, unique(:)
+  real(wp), allocatable :: final_masses(:)
 
   logical  :: sel,echo,exdat,mpop,small
   logical  :: ex,ex1,ex2,ex3,ex4
@@ -375,7 +379,8 @@ program plotms
   checksum  = 0.0_wp
   checksum2 = 0.0_wp
   save_mass = 0.0_wp
-  amount    = 0
+  index_mass= 0
+  intensity = 0
   list_masses = 0.0_wp
 
   do
@@ -451,40 +456,55 @@ program plotms
       checksum = checksum + chrg   !Check total charge
     
       !> compute pattern, nsig signals at masses mass with int mint
-      !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, exact_intensity, nsig, noIso)
       call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, noIso, xmass)
       !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, noIso, save_mass)
 
-      call check_bucket(xmass, list_masses, amount, counter)
-      save_mass(counter) = xmass
+      call check_bucket(counter, xmass, list_masses, index_mass, intensity, mzmin)
+  
 
       !!> distribute charge (if set as input)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
       !> calculate the total mass
-      do atm_types = 1, nsig
-        tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
-      enddo
+      !do atm_types = 1, nsig
+      !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
+      !enddo
 
     endif
 
   enddo
 
-  do i = 1, amount
-    write(*,*) list_masses(i)
+  allocate(exact_intensity(index_mass))
+  allocate(final_masses(index_mass))
+  allocate(pk_tmass(index_mass))
+
+
+  do i = 1, index_mass
+    write(*,*) i, list_masses(i), intensity(i)
   enddo
 
-  !call count_bucket(counter, save_mass, list_mass, amount)
-  !mint(k) = save_mass(k) / sum(save_mass)
 
-  !!> distribute charge (if set as input)
-  !if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
-  !> calculate the total mass
-  !do atm_types = 1, nsig
-  !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
-  !enddo
- 
+  !write(*,*) 'sum int: ', sum(intensity)
+  !write(*,*) 'nsig: ', nsig
+  write(*,*)
+
+!  write(*,*) ' Weight'
+  do i = 1, index_mass
+    exact_intensity(i)  = real(intensity(i),wp) / sum(real(intensity,wp))
+!    write(*,*) exact_intensity(i)
+  enddo
+
+
+  write(*,*)
+!  write(*,*) ' Total masses * weighing'
+  do i = 1, index_mass
+    tmass(i) = list_masses(i) * exact_intensity(i) ! * abs(chrg)
+    write(*,*) tmass(i)
+  enddo
+
+
+
   !> write out the sum of charges
   write(*,*) n,' (charged) fragments done.'
   write(*,*)
@@ -579,15 +599,28 @@ rd: do
   !> get the minimum m/z value that is to be plotted
   j = 0
   !>> sum the total mass only over all values higher than provided (default: 10) 
-  do i = mzmin, 10000
-    if ( tmass(i) /= 0 ) j = i
-  enddo
+  !do i = mzmin, 10000
+  !  if ( tmass(i) /= 0 ) j = i
+  !enddo
+  !do i = 1, index_mass
+  !  if ( list_masses(i) <= mzmin ) then
+  !    final_masses(i) = 0 
+  !  endif
+  !enddo
 
-  imin = max(imin,mzmin)
+  !final_masses = pack(list_masses, list_masses > mzmin)
+  !pk_tmass = pack(tmass,tmass>mzmin)
 
-  imax = max(j,imax)
+  imin = mzmin
+
+  !imax = max(j,imax)
+  imax = nint(maxval(list_masses))
   
-  tmax = maxval(tmass(mzmin:10000))
+  !tmax = maxval(tmass(mzmin:10000))
+  tmax = maxval(tmass)
+  write(*,*) 'tmax', tmax
+
+  ! echt nicht sicher ob tmass auch das tmass sein soll, aber schauen
   
   ! counts of structures in the 100% peak
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
@@ -661,9 +694,17 @@ rd: do
      enddo
   
   ! write only masses > mzmin
-     do i = mzmin, 10000
+     !do i = mzmin, 10000
+     !   if(tmass(i) /= 0)then
+     !      write(io_mass,*) i, 100.0_wp * tmass(i)/tmax
+!    !       write(9,*) i,100.*tmass(i)/tmax   !ce50values
+     !   endif
+     !enddo
+     !write(io_mass,*)'&'
+     do i = 1, index_mass
         if(tmass(i) /= 0)then
-           write(io_mass,*) i, 100.0_wp * tmass(i)/tmax
+           write(*,*) list_masses(i) , 100.0_wp * tmass(i)/tmax
+           write(io_mass,*) list_masses(i) , 100.0_wp * tmass(i)/tmax
 !           write(9,*) i,100.*tmass(i)/tmax   !ce50values
         endif
      enddo
