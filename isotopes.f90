@@ -9,11 +9,15 @@
   
   ! TK See: ATOMIC WEIGHTS OF THE ELEMENTS: REVIEW 2000 (IUPAC Technical Report)
   ! TK Pure Appl. Chem., Vol. 75, No. 6, pp. 683800, 2003.
-  
-subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_isotopes, &
-    xmass )
+ 
+module isotope_pattern
   use xtb_mctc_accuracy, only: wp
   implicit none
+
+  contains
+
+subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
+    nsig, no_isotopes, index_mass, exact_intensity, isotope_masses, z_chrg )
 
   integer :: ntot,iat_save(*),nsig,maxatm
   integer :: mass(*)
@@ -23,18 +27,30 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
   integer :: counter, cnt, jay
   integer :: mat_mass!(2)
   integer,parameter :: nrnd = 50000 
+  integer :: loop, index_mass
+!  integer :: tmp_intensity
+  integer :: intensity(1000)
+  integer :: mzmin
+  integer :: z_chrg
 
   real(wp) :: mint(*)
   real(wp) :: rnd(nrnd,maxatm)
   real(wp) :: r,sum_prob
   real(wp) :: prob(200,10),massiso(200,10),p1,p2,x,xmass
 !  real(wp), allocatable :: exc_intens(:,:)
+  real(wp) :: list_masses(nrnd)
+  real(wp),allocatable :: exact_masses(:)
+  real(wp),allocatable :: isotope_masses(:)
 
   real(wp) :: exc_mass(100)
-  real(wp) :: save_mass(counter)
-  real(wp) :: newmass
+  real(wp) :: save_mass(nrnd)
+  real(wp) :: current_mass
+
+  real(wp), allocatable :: exact_intensity(:)
+  !real(wp) :: exact_intensity(1000)
 
   logical  :: no_isotopes
+  logical  :: there
 
   niso=0
   prob=0
@@ -77,7 +93,7 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
         massiso(9,1)      = 18.998403_wp
   
   !  13 Al (Aluminium)                                                                                 
-          niso(13)        = 1                                                                                  
+          niso(13)        = 1
           prob(13,1)      = 100.0_wp
           massiso(13,1)   = 26.981538_wp
   
@@ -387,7 +403,10 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
   ! postprocessing starts here 
   
   prob = prob * 0.01_wp
- 
+  save_mass = 0.0_wp
+  list_masses = 0.0_wp
+  index_mass = 1
+
   !  Has to be done only once to check for correct isotope entries
   !> loop over all mases to element 83 (Bismuth)
   if (counter == 1) then
@@ -466,30 +485,79 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
       imass = nint(xmass)                  ! here it gets to integers - changed to nearest int nint
       nmass(imass) = nmass(imass) + 1
 
-      !save_mass(n) = xmass
+      save_mass(n) = xmass
+      current_mass = xmass / abs(z_chrg)
 
+      there = .true.
+      if ( current_mass > mzmin ) then 
+        !> loop over all entries in the list
+        do loop = 1, index_mass
+          !>> true if already in list, end
+          if     ( list_masses(loop) == current_mass ) then
+            there = .true.
+            exit
+          !>> false if not in list, store
+          elseif ( list_masses(loop) /= current_mass ) then
+            there = .false.
+          endif
+        enddo
 
-      !do j = 1, cnt
-      !  if (newmass(j) /= xmass) then
-      !  !if (save_mass /= xmass) then
-      !    cnt = cnt + 1
-      !    save_mass(j) = xmass
-      !    !save_mass = xmass
-      !endif
+        !> if it is not in the list, add it
+        if ( .not. there ) then
+          !index_mass = index_mass + 1
+          list_masses(index_mass) = current_mass
+          !write(*,*) list_masses(loop)
+        endif
+
+        !!> count the number of signals
+        do loop = 1, index_mass
+
+          if (list_masses(loop) == current_mass) then
+            intensity(loop) = intensity(loop) + 1
+            !write(*,*) intensity(loop)
+          endif
+
+        enddo
+
+        if ( .not. there ) then
+          index_mass = index_mass + 1
+          there = .true.
+        endif
+      endif
 
 
     enddo
   endif
+  index_mass = index_mass - 1
 
-  !newmass = 0.0_wp
-  !mat_mass = minloc(save_mass,1) !, mask = min(save_mass))! > newmass)
-  !save_mass(counter) = xmass
+  allocate(exact_intensity(index_mass))
+  allocate(isotope_masses(index_mass))
 
 
-  !if ( save_mass(nrnd) /= xmass) then
-  !  write(*,*) 'smass', save_mass(nrnd)
-  !  write(*,*) counter, xmass
-  !endif
+  do loop = 1, index_mass
+   ! exact_masses(loop) = minval(
+    isotope_masses(loop) = list_masses(loop) 
+    exact_intensity(loop)  = real(intensity(loop),wp) / sum(real(intensity,wp))
+    !write(*,*) isotope_masses(loop), intensity(loop)
+  enddo
+
+
+  
+  !write(*,*) 
+  !write(*,*) 'intensity'
+  !do loop = 1, index_mass
+  !  !write(*,*) isotope_masses(loop), exact_intensity(loop)
+  !enddo
+  !write(*,*) 
+
+
+  !nsig = index_mass
+  !write(*,*) nsig
+
+  !< verteilung -> größtest haupt, rest + integer?
+  !main_peak = maxloc(exact_intensity)
+
+
   
   isum = sum(nmass)
   k = 0
@@ -503,4 +571,8 @@ subroutine isotope(counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, no_is
   
   nsig = k
 
-end subroutine 
+
+end subroutine isotope
+
+
+end module isotope_pattern

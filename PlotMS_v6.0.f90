@@ -34,6 +34,7 @@
 
 program plotms
   use bucket, only: check_bucket
+  use isotope_pattern, only: isotope
   use qcxms_boxmuller, only: vary_energies
   use qcxms_readcommon
   use xtb_mctc_accuracy, only: wp
@@ -55,8 +56,8 @@ program plotms
   integer :: counter
   integer :: z_chrg
   integer :: cc, cnew
-  integer :: index_mass, mass_index
-  integer :: intensity(1000)
+  integer :: index_mass, mass_index, count_mass
+!  integer :: intensity(1000)
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
   real(wp) :: chrg,chrg2,dum,checksum,score
@@ -69,11 +70,12 @@ program plotms
   real(wp) :: list_masses(1000)
   real(wp) :: xmass
   real(wp) :: jay
-  real(wp), allocatable :: pk_tmass(:)
+  real(wp), allocatable :: intensity(:)
   real(wp), allocatable :: exact_intensity(:)
+  real(wp), allocatable :: isotope_masses(:)
+  real(wp), allocatable :: pk_tmass(:)
   real(wp), allocatable :: rnd(:,:)
   real(wp), allocatable :: checksum2(:), save_mass(:)!, unique(:)
-  real(wp), allocatable :: final_masses(:)
 
   logical  :: sel,echo,exdat,mpop,small
   logical  :: ex,ex1,ex2,ex3,ex4
@@ -325,7 +327,7 @@ program plotms
         if ( z_chrg > int(total_charge) ) total_charge = real( z_chrg, wp )
       endif
     elseif ( z_chrg < 0 ) then
-      if (chrg2 < -1*cthr) then  !default: chrg2 > 0.001
+      if (chrg2 < -1.0_wp*cthr) then  !default: chrg2 > 0.001
         ntot = sum(nat(1:atm_types))
         if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
         if ( z_chrg < int(total_charge) ) total_charge = real( z_chrg, wp )
@@ -381,8 +383,12 @@ program plotms
   save_mass = 0.0_wp
   index_mass= 0
   intensity = 0
+  count_mass = 0
   list_masses = 0.0_wp
 
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !> start the loop, processing the qcxms.res file, line-by-line
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   do
 
     counter = counter + 1
@@ -456,32 +462,48 @@ program plotms
       checksum = checksum + chrg   !Check total charge
     
       !> compute pattern, nsig signals at masses mass with int mint
-      call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, nsig, noIso, xmass)
+      call isotope (counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
+        nsig, noIso, index_mass, exact_intensity, isotope_masses, z_chrg)
       !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, noIso, save_mass)
+      allocate(intensity(index_mass))
 
-      call check_bucket(counter, xmass, list_masses, index_mass, intensity, mzmin)
-  
+      !call check_bucket(index_mass, isotope_masses, exact_intensity, &
+      !  list_masses, intensity, count_mass)
+ 
+      !write(*,*) 'masses   ||    intensity'
+      do i = 1, index_mass
+       ! write(*,*) isotope_masses(i), exact_intensity(i)
+      enddo
+      deallocate(exact_intensity)
+      deallocate(isotope_masses)
+      deallocate(intensity)
 
       !!> distribute charge (if set as input)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
       !> calculate the total mass
-      !do atm_types = 1, nsig
+      do atm_types = 1, nsig
+        tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
+      enddo
+      !do atm_types = 1, index_mass
       !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
       !enddo
 
     endif
 
   enddo
+  !> end the loop
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   allocate(exact_intensity(index_mass))
-  allocate(final_masses(index_mass))
+!  allocate(isotope_masses(index_mass))
+!  allocate(final_masses(index_mass))
   allocate(pk_tmass(index_mass))
 
 
-  do i = 1, index_mass
-    write(*,*) i, list_masses(i), intensity(i)
-  enddo
+  !do i = 1, index_mass
+  !  write(*,*) i, list_masses(i), intensity(i)
+  !enddo
 
 
 
@@ -491,8 +513,8 @@ program plotms
 
 !  write(*,*) ' Weight'
   do i = 1, index_mass
-    exact_intensity(i)  = real(intensity(i),wp) / sum(real(intensity,wp))
-!    write(*,*) exact_intensity(i)
+!    exact_intensity(i)  = real(intensity(i),wp) / sum(real(intensity,wp))
+    write(*,*) exact_intensity(i)
   enddo
 
 
@@ -500,7 +522,7 @@ program plotms
 !  write(*,*) ' Total masses * weighing'
   do i = 1, index_mass
     tmass(i) = list_masses(i) * exact_intensity(i) ! * abs(chrg)
-    write(*,*) tmass(i)
+  !  write(*,*) tmass(i)
   enddo
 
 
