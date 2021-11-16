@@ -56,7 +56,7 @@ program plotms
   integer :: counter
   integer :: z_chrg
   integer :: cc, cnew
-  integer :: index_mass, mass_index, count_mass
+  integer :: index_mass, mass_index, count_mass, sum_index
 !  integer :: intensity(1000)
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
@@ -67,15 +67,17 @@ program plotms
   real(wp) :: chrg_wdth
   real(wp) :: total_charge
   real(wp) :: check_mass, unique
-  real(wp) :: list_masses(1000)
   real(wp) :: xmass
-  real(wp) :: jay
-  real(wp), allocatable :: intensity(:)
+  real(wp),allocatable :: save_intensity(:)
   real(wp), allocatable :: exact_intensity(:)
   real(wp), allocatable :: isotope_masses(:)
   real(wp), allocatable :: pk_tmass(:)
   real(wp), allocatable :: rnd(:,:)
   real(wp), allocatable :: checksum2(:), save_mass(:)!, unique(:)
+  !real(wp), allocatable :: list_masses(:)
+  !real(wp), allocatable :: intensity(:)
+  real(wp) :: list_masses(10000)
+  real(wp) :: intensity(10000)
 
   logical  :: sel,echo,exdat,mpop,small
   logical  :: ex,ex1,ex2,ex3,ex4
@@ -237,7 +239,7 @@ program plotms
   write(*,*)
   write(*,*) '*******************************'
   write(*,*) '* QCxMS output reader PLOTMS  *'
-  write(*,*) '*     v. 6.0 Oct 2021         *'
+  write(*,*) '*     v. 6.0 Nov 2021         *'
   write(*,*) '*         S. Grimme           *'
   write(*,*) '*         J. Koopman          *'
   write(*,*) '*******************************'
@@ -385,6 +387,7 @@ program plotms
   intensity = 0
   count_mass = 0
   list_masses = 0.0_wp
+  sum_index = 0
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !> start the loop, processing the qcxms.res file, line-by-line
@@ -465,27 +468,31 @@ program plotms
       call isotope (counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
         nsig, noIso, index_mass, exact_intensity, isotope_masses, z_chrg)
       !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, noIso, save_mass)
-      allocate(intensity(index_mass))
+      !allocate(intensity(index_mass))
 
-      !call check_bucket(index_mass, isotope_masses, exact_intensity, &
-      !  list_masses, intensity, count_mass)
+       if (index_mass > 0) then
+      call check_bucket( index_mass, isotope_masses, exact_intensity, &
+        list_masses, intensity, count_mass, chrg)
+      endif
  
+      !write(*,*) 'NEXT LOOP'
       !write(*,*) 'masses   ||    intensity'
-      do i = 1, index_mass
-       ! write(*,*) isotope_masses(i), exact_intensity(i)
-      enddo
+      !do i = 1, index_mass
+      !  write(*,*) isotope_masses(i), exact_intensity(i)
+      !enddo
       deallocate(exact_intensity)
       deallocate(isotope_masses)
-      deallocate(intensity)
+      !deallocate(intensity)
+
 
       !!> distribute charge (if set as input)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
       !> calculate the total mass
-      do atm_types = 1, nsig
-        tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
-      enddo
-      !do atm_types = 1, index_mass
+      !do atm_types = 1, nsig
+      !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
+      !enddo
+      !do atm_types = 1, 
       !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
       !enddo
 
@@ -495,37 +502,20 @@ program plotms
   !> end the loop
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  allocate(exact_intensity(index_mass))
+  !allocate(exact_intensity(index_mass))
 !  allocate(isotope_masses(index_mass))
 !  allocate(final_masses(index_mass))
-  allocate(pk_tmass(index_mass))
+  !allocate(pk_tmass(index_mass))
+      !do atm_types = 1, count_mass
+      !  intensity(atm_types) = intensity(atm_types)  * abs(chrg)
+      !enddo
 
-
-  !do i = 1, index_mass
-  !  write(*,*) i, list_masses(i), intensity(i)
+  write(*,*) 'count_mass', count_mass
+  tmax = maxval(intensity)
+  !do i = 1, count_mass
+  !   write(*,*) i, list_masses(i), intensity(i) / tmax
   !enddo
-
-
-
-  !write(*,*) 'sum int: ', sum(intensity)
-  !write(*,*) 'nsig: ', nsig
-  write(*,*)
-
-!  write(*,*) ' Weight'
-  do i = 1, index_mass
-!    exact_intensity(i)  = real(intensity(i),wp) / sum(real(intensity,wp))
-    write(*,*) exact_intensity(i)
-  enddo
-
-
-  write(*,*)
-!  write(*,*) ' Total masses * weighing'
-  do i = 1, index_mass
-    tmass(i) = list_masses(i) * exact_intensity(i) ! * abs(chrg)
-  !  write(*,*) tmass(i)
-  enddo
-
-
+  
 
   !> write out the sum of charges
   write(*,*) n,' (charged) fragments done.'
@@ -639,8 +629,8 @@ rd: do
   imax = nint(maxval(list_masses))
   
   !tmax = maxval(tmass(mzmin:10000))
-  tmax = maxval(tmass)
-  write(*,*) 'tmax', tmax
+  !tmax = maxval(tmass)
+  !write(*,*) 'tmax', tmax
 
   ! echt nicht sicher ob tmass auch das tmass sein soll, aber schauen
   
@@ -723,13 +713,19 @@ rd: do
      !   endif
      !enddo
      !write(io_mass,*)'&'
-     do i = 1, index_mass
-        if(tmass(i) /= 0)then
-           write(*,*) list_masses(i) , 100.0_wp * tmass(i)/tmax
-           write(io_mass,*) list_masses(i) , 100.0_wp * tmass(i)/tmax
-!           write(9,*) i,100.*tmass(i)/tmax   !ce50values
-        endif
-     enddo
+!     do i = 1, index_mass
+     !do i = 1, count_mass
+     !   if(tmass(i) /= 0)then
+     !      write(*,*) list_masses(i) , 100.0_wp * tmass(i) !/tmax
+     !      write(io_mass,*) list_masses(i) , 100.0_wp * tmass(i)!/tmax
+!    !       write(9,*) i,100.*tmass(i)/tmax   !ce50values
+     !   endif
+     !enddo
+    do i = 1, count_mass 
+      write(*,*) i, list_masses(i), intensity(i) / tmax
+      write(io_mass,*)  list_masses(i), 100.0_wp * (intensity(i) / tmax)
+
+    enddo
      write(io_mass,*)'&'
   
 !     close(9)

@@ -24,12 +24,11 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
   integer :: niso(200)
   integer :: nmass(10000)
   integer :: n,i,j,iso,imass,isum,k,iti
-  integer :: counter, cnt, jay
-  integer :: mat_mass!(2)
+  integer :: counter
   integer,parameter :: nrnd = 50000 
   integer :: loop, index_mass
 !  integer :: tmp_intensity
-  integer :: intensity(1000)
+  integer :: store_int(1000)
   integer :: mzmin
   integer :: z_chrg
 
@@ -463,7 +462,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
     ! loop over random number runs
     nmass = 0
 
-    cnt = 1
 
     do n = 1, nrnd
       xmass = 0
@@ -486,7 +484,7 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
       nmass(imass) = nmass(imass) + 1
 
       save_mass(n) = xmass
-      current_mass = xmass / abs(z_chrg)
+      current_mass = xmass / real(abs(z_chrg),wp)
 
       there = .true.
       if ( current_mass > mzmin ) then 
@@ -506,15 +504,15 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
         if ( .not. there ) then
           !index_mass = index_mass + 1
           list_masses(index_mass) = current_mass
-          !write(*,*) list_masses(loop)
+          !write(*,*) list_masses(index_mass)
         endif
 
         !!> count the number of signals
         do loop = 1, index_mass
 
           if (list_masses(loop) == current_mass) then
-            intensity(loop) = intensity(loop) + 1
-            !write(*,*) intensity(loop)
+            store_int(loop) = store_int(loop) + 1
+            !write(*,*) store_int(loop)
           endif
 
         enddo
@@ -535,18 +533,20 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
 
 
   do loop = 1, index_mass
-   ! exact_masses(loop) = minval(
     isotope_masses(loop) = list_masses(loop) 
-    exact_intensity(loop)  = real(intensity(loop),wp) / sum(real(intensity,wp))
-    !write(*,*) isotope_masses(loop), intensity(loop)
+    !exact_intensity(loop)  = real(store_int(loop),wp) / sum(real(store_int,wp))
+    exact_intensity(loop)  = float(store_int(loop)) / sum(float(store_int))
+    !write(*,*) isotope_masses(loop), store_int(loop)
+    !write(*,*) exact_intensity(loop)
   enddo
 
 
-  
+ ! write(*,*) 'ISO'
   !write(*,*) 
-  !write(*,*) 'intensity'
+  !write(*,*) 'store_int'
   !do loop = 1, index_mass
-  !  !write(*,*) isotope_masses(loop), exact_intensity(loop)
+    !write(*,*) isotope_masses(loop), exact_intensity(loop)
+  !  write(*,*) loop, exact_intensity(loop)
   !enddo
   !write(*,*) 
 
@@ -566,9 +566,10 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
         k = k + 1
         mass(k) = i
         mint(k) = float(nmass(i)) / float(isum)
+        !write(*,*) k, mint(k)
      endif
   enddo
-  
+ 
   nsig = k
 
 
