@@ -18,7 +18,9 @@ srcs = ['PlotMS_v6.0.f90',
        'bucket.f90',
        'readcommon.f90',
        'readl.f90',
-       'accuracy.f90'
+       'xtb_mctc_accuracy.f90',
+       'xtb_mctc_symbols.f90',
+       'xtb_mctc_resize.f90'
        ]
 
 #plotms_exe = executable(

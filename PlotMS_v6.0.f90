@@ -38,6 +38,7 @@ program plotms
   use qcxms_boxmuller, only: vary_energies
   use qcxms_readcommon
   use xtb_mctc_accuracy, only: wp
+  use xtb_mctc_symbols, only: toSymbol
   implicit none
 
  !treat i,j,k,l,m,n as integers and all other variables as real (?!?!)
@@ -55,9 +56,9 @@ program plotms
   integer :: io_spec, io_raw, io_mass, io_exp, io_jcamp
   integer :: counter
   integer :: z_chrg
-  integer :: cc, cnew
-  integer :: index_mass, mass_index, count_mass, sum_index
-!  integer :: intensity(1000)
+  integer :: cnt
+  integer :: index_mass, count_mass, sum_index
+  integer :: sorted_index
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
   real(wp) :: chrg,chrg2,dum,checksum,score
@@ -66,14 +67,12 @@ program plotms
   real(wp) :: tmass(10000) ! tmass contains abundances (real) for each unit mass (i)
   real(wp) :: chrg_wdth
   real(wp) :: total_charge
-  real(wp) :: check_mass, unique
-  real(wp) :: xmass
-  real(wp),allocatable :: save_intensity(:)
+  real(wp) :: lowest
+  real(wp), allocatable :: sorted_masses(:), sorted_intensity(:)
   real(wp), allocatable :: exact_intensity(:)
   real(wp), allocatable :: isotope_masses(:)
-  real(wp), allocatable :: pk_tmass(:)
   real(wp), allocatable :: rnd(:,:)
-  real(wp), allocatable :: checksum2(:), save_mass(:)!, unique(:)
+  real(wp), allocatable :: checksum2(:), save_mass(:)
   !real(wp), allocatable :: list_masses(:)
   !real(wp), allocatable :: intensity(:)
   real(wp) :: list_masses(10000)
@@ -82,12 +81,13 @@ program plotms
   logical  :: sel,echo,exdat,mpop,small
   logical  :: ex,ex1,ex2,ex3,ex4
   logical  :: noIso, Plasma
-  logical  :: mask
   
   ! fname=<qcxms.res> or result file, xname contains the mass.agr plot file
   character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
+  !character(len=:), allocatable  :: Frag_Name
+  character(len=20), dimension(20)  :: Frag_Name
 
   mpop          = .false.
   echo          = .false.
@@ -348,7 +348,6 @@ program plotms
   !> allocate the variables
   allocate (checksum2(maxrun), &
     &       save_mass(counter))
-!    &       unique(counter))
 
   n = i - 1  ! n = no. of fragments with amount maxatm of atoms
   
@@ -395,7 +394,6 @@ program plotms
   do
 
     counter = counter + 1
-    !write(*,*) 'COUNTER', counter
 
     !> read the fragment entry from qcxms.res line by line
     if (spec == 1) then    !EI
@@ -410,6 +408,17 @@ program plotms
 
     endif
 
+
+    !do kk = 1, atm_types
+    ! 
+    !  syb_frag(kk) = iat(kk)
+    !  nmb_frag(kk) = nat(kk)
+    !  !write(*,'(a2,i2)') toSymbol(iat(kk)), nat(kk)
+    !  !write(frag_name,'(a2,i2)') toSymbol(iat(kk)), nat(kk)
+    !  !write(*,*) frag_name(kk)
+    !enddo
+
+    ! write(*,*) frag_name
   
     sel = .false.
     chrg = chrg2
@@ -464,37 +473,31 @@ program plotms
 
       checksum = checksum + chrg   !Check total charge
     
-      !> compute pattern, nsig signals at masses mass with int mint
+      !> compute isotope patterns via monte carlo and save intensites 
+      !  of all possible combinations 
       call isotope (counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
         nsig, noIso, index_mass, exact_intensity, isotope_masses, z_chrg)
-      !call isotope (counter, ntot, iat_save, maxatm, rnd, mass, mint, noIso, save_mass)
-      !allocate(intensity(index_mass))
 
+      !>> distribute charge (if set as input)
+      if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
+
+      !> sort the single fragment intensities over the entire list of frags
        if (index_mass > 0) then
       call check_bucket( index_mass, isotope_masses, exact_intensity, &
         list_masses, intensity, count_mass, chrg)
       endif
  
-      !write(*,*) 'NEXT LOOP'
-      !write(*,*) 'masses   ||    intensity'
-      !do i = 1, index_mass
-      !  write(*,*) isotope_masses(i), exact_intensity(i)
-      !enddo
       deallocate(exact_intensity)
       deallocate(isotope_masses)
-      !deallocate(intensity)
 
-
-      !!> distribute charge (if set as input)
-      if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
       !> calculate the total mass
       !do atm_types = 1, nsig
       !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
       !enddo
-      !do atm_types = 1, 
-      !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
-      !enddo
+
+
+
 
     endif
 
@@ -502,19 +505,23 @@ program plotms
   !> end the loop
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  !allocate(exact_intensity(index_mass))
-!  allocate(isotope_masses(index_mass))
-!  allocate(final_masses(index_mass))
-  !allocate(pk_tmass(index_mass))
-      !do atm_types = 1, count_mass
-      !  intensity(atm_types) = intensity(atm_types)  * abs(chrg)
-      !enddo
 
-  write(*,*) 'count_mass', count_mass
-  tmax = maxval(intensity)
-  !do i = 1, count_mass
-  !   write(*,*) i, list_masses(i), intensity(i) / tmax
-  !enddo
+     !write(*,*) frag_name
+
+  !> sort the list with increasing masses
+  allocate(sorted_masses(count_mass), sorted_intensity(count_mass))
+  lowest = 0.0_wp
+  cnt=1
+
+  !>> find the lowest entry and save it in new lists, repeat with all values
+  !   larger than the last value (lowest)
+  do i = 1, count_mass
+    sorted_index = minloc(list_masses,1, mask = list_masses > lowest)
+    lowest = list_masses(sorted_index)
+    sorted_masses(i) = list_masses(sorted_index)
+    sorted_intensity(i) = intensity(sorted_index)
+    !write(*,*) i, sorted_index, sorted_masses(i), sorted_intensity(i)
+  enddo
   
 
   !> write out the sum of charges
@@ -621,12 +628,13 @@ rd: do
   !enddo
 
   !final_masses = pack(list_masses, list_masses > mzmin)
-  !pk_tmass = pack(tmass,tmass>mzmin)
 
   imin = mzmin
 
   !imax = max(j,imax)
   imax = nint(maxval(list_masses))
+  !> find the highest entry
+  tmax = maxval(intensity)
   
   !tmax = maxval(tmass(mzmin:10000))
   !tmax = maxval(tmass)
@@ -722,8 +730,8 @@ rd: do
      !   endif
      !enddo
     do i = 1, count_mass 
-      write(*,*) i, list_masses(i), intensity(i) / tmax
-      write(io_mass,*)  list_masses(i), 100.0_wp * (intensity(i) / tmax)
+!      write(*,*) i, sorted_masses(i), sorted_intensity(i) / tmax
+      write(io_mass,*)  sorted_masses(i), 100.0_wp * (sorted_intensity(i) / tmax)
 
     enddo
      write(io_mass,*)'&'

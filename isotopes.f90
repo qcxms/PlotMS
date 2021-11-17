@@ -36,12 +36,9 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
   real(wp) :: rnd(nrnd,maxatm)
   real(wp) :: r,sum_prob
   real(wp) :: prob(200,10),massiso(200,10),p1,p2,x,xmass
-!  real(wp), allocatable :: exc_intens(:,:)
   real(wp) :: list_masses(nrnd)
-  real(wp),allocatable :: exact_masses(:)
   real(wp),allocatable :: isotope_masses(:)
 
-  real(wp) :: exc_mass(100)
   real(wp) :: save_mass(nrnd)
   real(wp) :: current_mass
 

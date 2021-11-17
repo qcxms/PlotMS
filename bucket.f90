@@ -16,7 +16,6 @@ module bucket
       real(wp) :: xmass
       real(wp) :: isotope_masses(index_mass)
       real(wp) :: exact_intensity(index_mass)
-      real(wp) :: maxi
       real(wp) :: chrg
 
       real(wp) :: list_masses(10000)
@@ -30,7 +29,6 @@ module bucket
       !real (wp) :: save_list(1000)
 
       logical :: there = .true.
-      logical :: last  = .false.
 
       xmass = 0
       loop = 0
