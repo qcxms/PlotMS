@@ -12,7 +12,7 @@ project('PlotMS',
   ],
 )
 
-srcs = ['PlotMS_v6.0.f90',
+srcs = ['main.f90',
        'isotopes.f90',
        'boxmuller.f90',
        'entries.f90',
