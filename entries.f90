@@ -1,10 +1,10 @@
-module bucket
+module count_entries
   use xtb_mctc_accuracy, only: wp
   implicit none
 
   contains
 
-    subroutine check_bucket(index_mass, isotope_masses, exact_intensity, &
+    subroutine check_entries(index_mass, isotope_masses, exact_intensity, &
         list_masses,  intensity,  count_mass, chrg)
    
       integer :: loop, loop2, index_mass
@@ -160,7 +160,6 @@ outer: do loop2 = 1, index_mass
             !write(*,*) i,intensity(i)
        !   enddo
    
-    end subroutine check_bucket
-
-
-end module bucket
+    end subroutine check_entries
+    
+end module count_entries 

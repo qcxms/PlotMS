@@ -33,7 +33,7 @@
 
 
 program plotms
-  use bucket, only: check_bucket
+  use count_entries, only: check_entries
   use isotope_pattern, only: isotope
   use qcxms_boxmuller, only: vary_energies
   use qcxms_readcommon
@@ -56,19 +56,26 @@ program plotms
   integer :: io_spec, io_raw, io_mass, io_exp, io_jcamp
   integer :: counter
   integer :: z_chrg
-  integer :: cnt
   integer :: index_mass, count_mass, sum_index
   integer :: sorted_index
+  integer :: list_length
+  integer :: exp_entries
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
   real(wp) :: chrg,chrg2,dum,checksum,score
-  real(wp) :: iexp (2,10000)
+  !real(wp) :: exp_mass (10000)
+  !real(wp) :: exp_int  (10000)
   real(wp) :: mint (1000)
   real(wp) :: tmass(10000) ! tmass contains abundances (real) for each unit mass (i)
   real(wp) :: chrg_wdth
   real(wp) :: total_charge
   real(wp) :: lowest
-  real(wp), allocatable :: sorted_masses(:), sorted_intensity(:)
+  real(wp) :: min_intensity 
+  real(wp), allocatable :: exp_mass (:)
+  real(wp), allocatable :: exp_int  (:)
+  real(wp), allocatable :: exp_list(:,:) 
+  real(wp), allocatable :: reduced_intensities(:), reduced_masses(:)
+  real(wp), allocatable :: sorted_masses(:), sorted_intensities(:)
   real(wp), allocatable :: exact_intensity(:)
   real(wp), allocatable :: isotope_masses(:)
   real(wp), allocatable :: rnd(:,:)
@@ -100,11 +107,11 @@ program plotms
   noIso         = .false.
   Plasma        = .false.
  
-  !> setup overall (initial) charge as used in QCxMS (has to be set manually)
   cthr          = 1.d-3
   chrg_wdth     = 0.0_wp
   total_charge  = 1.0_wp
   cthr2         = 0.01 ! only used for information, not in program
+  min_intensity = 0.0_wp
 
   z_chrg = 1
 
@@ -135,15 +142,15 @@ program plotms
   !  -t couting ions with charge x to y (give the value, e.g. "-t 1 2" for charge 1 to 2)
   !  -w broadening the charges by an SD 
   !  -s Take only secondary and tertiary fragmentations (give the value, e.g. "-s 2" for secondary)
-  !  -m set minimum value for m/z, so 100% value will be calc. for higher values (CID)
-  !  -i calculate NO isotope pattern
+  !  -m set minimum value for m/z, so 100% value will be calc. for higher values (x-axis)
+  !  -i set the minimum rel. intensity at which the signals are counted          (y-axis)
+  !  -p DO NOT calculate isotope pattern
   
   do i = 1, 9
      if(index(arg(i),'-a') /= 0)  cthr   = -1000.0_wp
      if(index(arg(i),'-v') /= 0)  echo   = .true.
      if(index(arg(i),'-f') /= 0)  fname  = arg(i+1)
-     if(index(arg(i),'-i') /= 0)  noIso  = .true.
-     if(index(arg(i),'-p') /= 0)  Plasma = .true.
+     if(index(arg(i),'-p') /= 0)  noIso  = .true.
 
      ! if = 0, unity intensities are regarded
      if(index(arg(i),'-t') /= 0) then
@@ -174,17 +181,14 @@ program plotms
         call readl(arg(i+1),xx,nn)
         total_charge = real(xx(1),wp)
      endif
+
+     ! set the minimum intensity
+     if(index(arg(i),'-i') /= 0)then
+        call readl(arg(i+1),xx,nn)
+        min_intensity = real(xx(1),wp)
+     endif
   enddo
 
-  
-!  if(index(arg(1),'-k') /= 0) then
-!     xname='~/.mass_jay_klein.agr'
-!     write(*,*) ' Using small Version'
-!     small = .True.
-!  else
-! !    xname='~/.mass_jay.agr'
-!     xname='~/.mass_raw.agr'
-!  endif
   
   xname = '~/.mass_raw.agr'
   
@@ -237,51 +241,59 @@ program plotms
 
   
   write(*,*)
-  write(*,*) '*******************************'
-  write(*,*) '* QCxMS output reader PLOTMS  *'
-  write(*,*) '*     v. 6.0 Nov 2021         *'
-  write(*,*) '*         S. Grimme           *'
-  write(*,*) '*         J. Koopman          *'
-  write(*,*) '*******************************'
-  write(*,*) 'Contributor:  C.Bauer, T.Kind '
+  write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
+  write(*,'(6x,''*           P l o t M S           *'')')
+  write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
+  write(*,'(6x,''*    QCxMS spectra plotting tool  *'')')
+  write(*,'(6x,''*          -  v. 6.0  -           *'')')
+  write(*,'(6x,''*          22. Nov 2021           *'')')
+  write(*,'(6x,''*           *   *   *             *'')')
+  write(*,'(6x,''*           S. Grimme             *'')')
+  write(*,'(6x,''*           J. Koopman            *'')')
+  write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
+  write(*,'(6x,''   Contributor:  C.Bauer, T.Kind   '')')
   write(*,*)
-  write(*,*) 'xmgrace file body ',trim(xname)
-  write(*,*) 'Reading ... ', trim(fname)
+  write(*,'(6x,''      -> Reading file: '',(a)         )')trim(fname)
+  write(*,*)
   write(*,*)
   
   ! ------------------------------------------------------------------------------------------------------!
   ! execute arguments
   
-  write(*,*) ' '
+  write(*,'(''!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '')')
+  write(*,'('' The following settings are being used :  '')')
+  write(*,*)
+  write(*,'('' - xmgrace file body '',(a)         )')trim(xname)
+
   ! -w
   if(chrg_wdth > 0)then
-     write(*,'('' broadening the charges by an SD, wdth :'',f4.1)')chrg_wdth*100.
+    write(*,'('' - Broadening of the charges by an SD, wdth :'',f4.1)')chrg_wdth*100.
   endif
   
   ! -s
   if(isec /= 0)then
-     write(*,*) 'Taking only secondary, tertiary ... fragmentations ',isec
+    write(*,'('' - Taking only secondary, tertiary ... fragmentations '')') isec
   endif
   
   ! -m
   if(mzmin > 10)then
-     write(*,*) 'Only m/z values greater than',mzmin,'are considered'
+    write(*,'('' - Only m/z values greater than '',i4,'' are considered'')') mzmin
   endif
 
-  ! -c
-  !if ( total_charge > 0 ) then ! always (as information)
-  !   write(*,*) 'The total charge of the system is ', total_charge
-  !endif
+  ! -i
+  if ( min_intensity > 0.0_wp ) then 
+    write(*,'('' - Minimum signal intensity: '',f7.4,'' % (relative)'')') min_intensity
+  endif
 
   ! -t (choose if unity intensities or normal)
   if(cthr >= 0)then
-   !  write(*,'('' couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
+    write(*,'('' - couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
   else
-     write(*,'('' counting all fragments with unity charge (frag. overview)'')')
+    write(*,'('' - counting all fragments with unity charge (frag. overview)'')')
   endif
+  write(*,*)
+  write(*,'(''!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '')')
 
-  write(*,*) ' '
-  
   ! ------------------------------------------------------------------------------------------------------!
   tmass = 0
   maxrun = 0
@@ -305,14 +317,14 @@ program plotms
     !write(*,*) 'COUNTER', counter
 
     if (spec == 1) then    !EI
-      read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jsec, nf, atm_types, (iat(kk),nat(kk), kk = 1, atm_types)
+      read(io_spec,*,iostat=io) chrg2, irun, jsec, nf, atm_types, (iat(kk),nat(kk), kk = 1, atm_types)
       if(io<0) exit !EOF
-      if(io>0) stop 'Fail in read' !fail
+      if(io>0) stop ' -- Fail in read -- ' !fail
   
     elseif(spec == 2) then !CID
-      read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jcoll, jsec, nf, atm_types, (iat(kk), nat(kk), kk = 1, atm_types)
+      read(io_spec,*,iostat=io) chrg2, irun, jcoll, jsec, nf, atm_types, (iat(kk), nat(kk), kk = 1, atm_types)
       if(io<0) exit !EOF
-      if(io>0) stop 'Fail in read' !fail
+      if(io>0) stop ' -- Fail in read -- ' !fail
 
     else 
       write(*,*) 'S T O P - Something wrong in plotms - no spec'
@@ -322,19 +334,9 @@ program plotms
 
     if (isec > 0 .and. isec /= jsec) cycle !check tertiary,etc fragmentation (isec)
   
-    if ( z_chrg > 0 ) then
-      if (chrg2 > cthr) then  !default: chrg2 > 0.001
-        ntot = sum(nat(1:atm_types))
-        if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
-        if ( z_chrg > int(total_charge) ) total_charge = real( z_chrg, wp )
-      endif
-    elseif ( z_chrg < 0 ) then
-      if (chrg2 < -1.0_wp*cthr) then  !default: chrg2 > 0.001
-        ntot = sum(nat(1:atm_types))
-        if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
-        if ( z_chrg < int(total_charge) ) total_charge = real( z_chrg, wp )
-      endif
-
+    if (chrg2 > cthr) then  !default: chrg2 > 0.001
+      ntot = sum(nat(1:atm_types))
+      if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
     endif
 
     i = i + 1 !count number of single fragments with charge > chrt
@@ -343,7 +345,7 @@ program plotms
   enddo
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  write(*,*) 'The maximum charge of the system is ', total_charge
+  !write(*,*) 'The maximum charge of the system is ', total_charge
 
   !> allocate the variables
   allocate (checksum2(maxrun), &
@@ -351,13 +353,15 @@ program plotms
 
   n = i - 1  ! n = no. of fragments with amount maxatm of atoms
   
-  write(*,*) n,' fragments with ',maxatm,' atoms max.'
+  write(*,*)
+  write(*,'(''--------------------------------------- '')')
+  write(*,'(i4, '' fragments with '', i3 ,'' atoms max.'')') n, maxatm
+  write(*,'(''--------------------------------------- '')')
+  write(*,*)
   
   !close file
   close(io_spec)
 
-  !seed=42                                                                                     
-  !call random_seed(seed)                                                
   ! initialize the random number array (efficiency)
   allocate(rnd(50000,maxatm))  
   do i = 1, 50000
@@ -370,6 +374,7 @@ program plotms
   
   ! read it again
   write(*,*) 'Computing ...'
+  write(*,*)
   
   ! contains qcxms.res as standard option
   open ( file=fname, newunit=io_spec, status='old')
@@ -397,29 +402,18 @@ program plotms
 
     !> read the fragment entry from qcxms.res line by line
     if (spec == 1) then    !EI
-       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
+       read(io_spec,*,iostat=io) chrg2,  irun, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
        if(io<0) exit !EOF
        if(io>0) stop !fail
   
     elseif(spec == 2) then !CID
-       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jcoll, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
+       read(io_spec,*,iostat=io) chrg2, irun, jcoll, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
        if(io<0) exit !EOF
        if(io>0) stop !fail
 
     endif
 
 
-    !do kk = 1, atm_types
-    ! 
-    !  syb_frag(kk) = iat(kk)
-    !  nmb_frag(kk) = nat(kk)
-    !  !write(*,'(a2,i2)') toSymbol(iat(kk)), nat(kk)
-    !  !write(frag_name,'(a2,i2)') toSymbol(iat(kk)), nat(kk)
-    !  !write(*,*) frag_name(kk)
-    !enddo
-
-    ! write(*,*) frag_name
-  
     sel = .false.
     chrg = chrg2
 
@@ -430,18 +424,11 @@ program plotms
     if ( cthr < 0 ) chrg = total_charge
 
     !> count the moment where fragments were created (first/second MD or collision...)
-    !if ( (z_chrg > 0 .and. chrg > cthr) .or. (z_chrg < 0 .and. chrg < -1* cthr) ) then   ! default: yes
     if ( abs(chrg) > cthr )  then   ! default: yes
       sel = .true.
       ial = ial + 1              !count total amount of fragmentations
       jal(jsec) = jal(jsec) + 1  !count amount of first, sec., tert., ... fragmentations
 
-      !> if not fragmented (i.e. smaller/larger than total_charge) count it to kal(1)
-      !if ( abs(chrg) < abs(total_charge) ) then
-      !  kal(jcoll) = kal(jcoll) + 1 !count the collisions
-      !else
-      !  kal(1) = kal(jcoll) + 1     !no fragmentation
-      !endif
 
       !> count the collision at which most framentation occured
       if ( spec == 2 ) then
@@ -476,28 +463,19 @@ program plotms
       !> compute isotope patterns via monte carlo and save intensites 
       !  of all possible combinations 
       call isotope (counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
-        nsig, noIso, index_mass, exact_intensity, isotope_masses, z_chrg)
+        nsig, noIso, index_mass, exact_intensity, isotope_masses)
 
       !>> distribute charge (if set as input)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
 
       !> sort the single fragment intensities over the entire list of frags
        if (index_mass > 0) then
-      call check_bucket( index_mass, isotope_masses, exact_intensity, &
-        list_masses, intensity, count_mass, chrg)
+        call check_entries( index_mass, isotope_masses, exact_intensity, &
+          list_masses, intensity, count_mass, chrg)
       endif
  
       deallocate(exact_intensity)
       deallocate(isotope_masses)
-
-
-      !> calculate the total mass
-      !do atm_types = 1, nsig
-      !  tmass(mass(atm_types)) = tmass(mass(atm_types)) + mint(atm_types) * abs(chrg)
-      !enddo
-
-
-
 
     endif
 
@@ -505,22 +483,39 @@ program plotms
   !> end the loop
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+  list_length=0
 
-     !write(*,*) frag_name
+  !> find the highest intensity
+  tmax = maxval(intensity)
+
+  intensity(:) = intensity(:)/tmax * 100.0_wp
+
+  allocate(reduced_masses(count_mass), reduced_intensities(count_mass))
+
+  reduced_masses      = 0.0_wp
+  reduced_intensities = 0.0_wp
+
+  !> sort out everything we don't like
+  do i = 1, count_mass
+    if ( (intensity(i)) >= min_intensity ) then
+      list_length = list_length + 1
+      reduced_intensities(list_length) = intensity(i)
+      reduced_masses(list_length)      = list_masses(i)
+    endif
+  enddo
 
   !> sort the list with increasing masses
-  allocate(sorted_masses(count_mass), sorted_intensity(count_mass))
+  allocate(sorted_masses(list_length), sorted_intensities(list_length))
   lowest = 0.0_wp
-  cnt=1
 
   !>> find the lowest entry and save it in new lists, repeat with all values
   !   larger than the last value (lowest)
-  do i = 1, count_mass
-    sorted_index = minloc(list_masses,1, mask = list_masses > lowest)
-    lowest = list_masses(sorted_index)
-    sorted_masses(i) = list_masses(sorted_index)
-    sorted_intensity(i) = intensity(sorted_index)
-    !write(*,*) i, sorted_index, sorted_masses(i), sorted_intensity(i)
+  do i = 1, list_length
+    sorted_index = minloc(reduced_masses,1, mask = reduced_masses > lowest)
+    lowest = reduced_masses(sorted_index)
+    sorted_masses(i)    = reduced_masses(sorted_index)
+    sorted_intensities(i) = reduced_intensities(sorted_index)
+    !write(*,*) i, sorted_index, sorted_masses(i), sorted_intensities(i)
   enddo
   
 
@@ -539,7 +534,9 @@ program plotms
     endif
   enddo
   
-  write(*,*) k,' successfull runs.'
+  write(*,'(''* * * * * * * * * * * * * * * * * * * * '')')
+  write(*,*) k,' successfull runs!! '
+  write(*,'(''* * * * * * * * * * * * * * * * * * * * '')')
   
   write(*,*)
   write(*,*) 'ion sources:'
@@ -561,9 +558,9 @@ program plotms
   write(*,*)
 
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! read the provided experimental file (exp.dat) 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! read the provided experimental file (exp.dat) ! 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   imax=0
   imin=0
   
@@ -571,7 +568,7 @@ program plotms
   
   if(exdat) then
     write(*,*) 'Reading exp.dat ...'
-    open(file='exp.dat', newunit=io_exp, status='old')
+    open( file = 'exp.dat', newunit = io_exp, status = 'old')
   
     !> read the experimental (NIST) file 
 rd: do
@@ -579,10 +576,23 @@ rd: do
       if (iocheck < 0) exit rd
 
   
+      !> read the maximum intensity of exp.
       if(index(line,'##MAXY=') /= 0)then
         line(7:7)=' '
         call readl(line,xx,nn)
         norm=xx(nn)/100.0_wp
+      endif
+
+      !> allocate the number of entries
+      if(index(line,'##NPOINTS=') /= 0)then
+        line(10:10)=' '
+        call readl(line,xx,nn)
+        exp_entries = nint(xx(nn))
+        !write(*,*) 'EXP ENTRIES', exp_entries
+        !allocate (exp_list(2,exp_entries))
+        allocate (exp_mass(exp_entries), &
+          &       exp_int(exp_entries))
+        !allocate (exp_list(2,exp_entries))
       endif
   
       if(index(line,'##PEAK TABLE') /= 0)then
@@ -602,10 +612,10 @@ rd: do
   
           do k = 1, nn/2
              kk = kk + 1
-             iexp(1,kk) = xx(2 * k - 1)
-             iexp(2,kk) = xx(2 * k)
-             if(iexp(1,kk) > imax) imax = iexp(1,kk)
-             if(iexp(1,kk) < imin) imin = iexp(1,kk)
+             exp_mass(kk) = xx(2 * k - 1)
+             exp_int (kk) = xx(2 * k)
+             if(exp_mass(kk) > imax) imax = exp_mass(kk)
+             if(exp_int (kk) < imin) imin = exp_int (kk)
           enddo
         enddo
       endif
@@ -616,143 +626,114 @@ rd: do
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  
   !> get the minimum m/z value that is to be plotted
-  j = 0
-  !>> sum the total mass only over all values higher than provided (default: 10) 
-  !do i = mzmin, 10000
-  !  if ( tmass(i) /= 0 ) j = i
-  !enddo
-  !do i = 1, index_mass
-  !  if ( list_masses(i) <= mzmin ) then
-  !    final_masses(i) = 0 
-  !  endif
-  !enddo
-
-  !final_masses = pack(list_masses, list_masses > mzmin)
-
   imin = mzmin
 
-  !imax = max(j,imax)
-  imax = nint(maxval(list_masses))
-  !> find the highest entry
-  tmax = maxval(intensity)
-  
-  !tmax = maxval(tmass(mzmin:10000))
-  !tmax = maxval(tmass)
-  !write(*,*) 'tmax', tmax
+  !> get the maximum m/z value that is to be plotted
+  imax = nint(maxval(sorted_masses))
 
-  ! echt nicht sicher ob tmass auch das tmass sein soll, aber schauen
-  
   ! counts of structures in the 100% peak
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
  
-  !> verbose information
-  if(echo)then
-    write(*,*)'mass % intensity  counts   Int. exptl'
-    do i = mzmin, 10000
-       if (tmass(i) /= 0) then
-          dum = 0
-          do j = 1, kk
-             if(int(iexp(1,j)) == i) dum = iexp(2,j)
-          enddo
+  !> verbose information -> not yet available anymore with acc masses
+  !if(echo)then
+  !  write(*,*)'mass % intensity  counts   Int. exptl'
+  !  do i = 1, list_length !count_mass
+  !     if (sorted_masses(i) > mzmin) then
+  !        dum = 0
+  !        do j = 1, exp_entries
+  !           !if(int(iexp(1,j)) == i) dum = iexp(2,j)
+  !           if(int(iexp(1,j)) == i) dum = iexp(2,j)
+  !        enddo
 
-          write(*,'(i8,F8.2,i8,F8.2)') &
-          i, 100.0_wp *tmass(i)/tmax, idint(tmass(i)), dum/norm
-       endif
-    enddo
-  endif
+  !        write(*,'(i8,F8.2,i8,F8.2)') &
+  !        !i, 100.0_wp *sorted_masses(i)/tmax, idint(tmass(i)), dum/norm
+  !        !i, 100.0_wp *sorted_intensities(i)/tmax, sorted_masses(i), dum/norm
+  !        i, sorted_intensities(i), sorted_masses(i), dum/norm
+  !     endif
+  !  enddo
+  !endif
   
   ! when the template exists
   
   inquire(file=xname, exist=ex)
   if(ex)then
-     open(file=xname, newunit=io_raw)
+    open(file=xname, newunit=io_raw)
    
-  ! Original file called .mass_raw.agr
-     if(       small ) open( file='small_mass.agr', newunit=io_mass)
-     if( .not. small ) open( file='mass.agr',       newunit=io_mass)
-  !   open(unit=9,file='intensities.txt')
+    ! Original file called .mass_raw.agr
+    if(       small ) open( file='small_mass.agr', newunit=io_mass)
+    if( .not. small ) open( file='mass.agr',       newunit=io_mass)
+    !open(unit=9,file='intensities.txt')
   
-  ! my xmgrace file mass.agr has nagrfile lines
-     write(*,*)
-     write(*,*) 'Writing mass.agr ...'
-     do i = 1, nagrfile
-        read (io_raw,'(a)') line
-        if( .not. small )then 
-           if(index(line,'world 10') /= 0)then
-              write(line,'(''@    world '',i3,'', -105,'',i3,'', 100'')') imin, imax + 5
-           endif
-           if(index(line,'xaxis  tick major') /= 0)then
-              line='@    xaxis  tick major 20'
-                 if(imax > 200) line='@    xaxis  tick major 50' 
-           endif
+    ! my xmgrace file mass.agr has nagrfile lines
+    write(*,*)
+    write(*,*) 'Writing mass.agr ...'
+    do i = 1, nagrfile
+      read (io_raw,'(a)') line
+      if( .not. small )then 
+         if(index(line,'world 10') /= 0)then
+            write(line,'(''@    world '',i3,'', -105,'',i3,'', 100'')') imin, imax + 5
+         endif
+         if(index(line,'xaxis  tick major') /= 0)then
+            line='@    xaxis  tick major 20'
+               if(imax > 200) line='@    xaxis  tick major 50' 
+         endif
   
-           if(index(line,'@    s1 symbol size') /= 0)then
-              line='@    s1 symbol size 0.160000'
-              if(imax > 200) line='@    s1 symbol size 0.100000'
-           endif
+         if(index(line,'@    s1 symbol size') /= 0)then
+            line='@    s1 symbol size 0.160000'
+            if(imax > 200) line='@    s1 symbol size 0.100000'
+         endif
   
-           if(index(line,'@    s2 symbol size') /= 0)then
-              line='@    s2 symbol size 0.160000'
-              if(imax > 200) line='@    s2 symbol size 0.100000'
-           endif
-        !kleines Format
-        else
-           if(index(line,'world 10') /= 0)then
-              write(line,'(''@    world '',i3,'', 0,'',i3,'', 100'')') imin, imax + 5
-           endif  
-  !         if(index(line,'xaxis  tick major') /= 0)then
-  !            line='@    xaxis  tick major 10'
-  !!               if(imax > 200) line='@    xaxis  tick major 50' 
-  !         endif
-           
-           if(index(line,'@    s1 symbol size') /= 0)then
-              line='@    s1 symbol size 0.320000'
-  !            if(imax > 200) line='@    s1 symbol size 0.100000'
-           endif
+         if(index(line,'@    s2 symbol size') /= 0)then
+            line='@    s2 symbol size 0.160000'
+            if(imax > 200) line='@    s2 symbol size 0.100000'
+         endif
+      !kleines Format
+      else
+        if(index(line,'world 10') /= 0)then
+            write(line,'(''@    world '',i3,'', 0,'',i3,'', 100'')') imin, imax + 5
+        endif  
+        !if(index(line,'xaxis  tick major') /= 0)then
+        !line='@    xaxis  tick major 10'
+        !if(imax > 200) line='@    xaxis  tick major 50' 
+        !endif
+         
+        if(index(line,'@    s1 symbol size') /= 0)then
+          line='@    s1 symbol size 0.320000'
+        !if(imax > 200) line='@    s1 symbol size 0.100000'
         endif
-        write(io_mass,'(a)')line
-     enddo
-  
-  ! write only masses > mzmin
-     !do i = mzmin, 10000
-     !   if(tmass(i) /= 0)then
-     !      write(io_mass,*) i, 100.0_wp * tmass(i)/tmax
-!    !       write(9,*) i,100.*tmass(i)/tmax   !ce50values
-     !   endif
-     !enddo
-     !write(io_mass,*)'&'
-!     do i = 1, index_mass
-     !do i = 1, count_mass
-     !   if(tmass(i) /= 0)then
-     !      write(*,*) list_masses(i) , 100.0_wp * tmass(i) !/tmax
-     !      write(io_mass,*) list_masses(i) , 100.0_wp * tmass(i)!/tmax
-!    !       write(9,*) i,100.*tmass(i)/tmax   !ce50values
-     !   endif
-     !enddo
-    do i = 1, count_mass 
-!      write(*,*) i, sorted_masses(i), sorted_intensity(i) / tmax
-      write(io_mass,*)  sorted_masses(i), 100.0_wp * (sorted_intensity(i) / tmax)
-
+      endif
+      write(io_mass,'(a)')line
     enddo
-     write(io_mass,*)'&'
+ 
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! Write out the results into the mass.agr file !
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    do i = 1, list_length ! count_mass 
+      !write(*,*) i, sorted_masses(i), sorted_intensities(i) !/ tmax
+      !write(io_mass,*) sorted_masses(i), 100.0_wp * (sorted_intensities(i) / tmax)
+      write(io_mass,*) sorted_masses(i), sorted_intensities(i) 
+    enddo
+
+    write(io_mass,*)'&'
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   
-!     close(9)
   
-  ! TK establish again if exdat (experimental JCAMPDX) exists
-  ! TK @target G0.S1 means upper theory spectrum in current implementation
-  ! TK @target G0.S2 means lower experimental spectrum
-  ! TK iexp(1,i) - contains the exp masses and  iexp(2,i) contains the abundance
-  ! TK kk contains number of experimental spectra
+    ! TK establish again if exdat (experimental JCAMPDX) exists
+    ! TK @target G0.S1 means upper theory spectrum in current implementation
+    ! TK @target G0.S2 means lower experimental spectrum
+    ! TK exp_mass(i) - contains the exp masses and  exp_int(i) contains the abundance
+    ! TK  exp_entries contains number of experimental spectra
   
-     if(exdat)then
-       write(io_mass,*)'@target G0.S2'
-       write(io_mass,*)'@type bar'
-       do i=1,kk
-          write(io_mass,*) iexp(1,i),-iexp(2,i)/norm
-       enddo
-       write(io_mass,*)'&'
-     endif
-  endif
+    if(exdat)then
+      write(io_mass,*)'@target G0.S2'
+      write(io_mass,*)'@type bar'
+      do i=1,exp_entries
+         write(io_mass,*) exp_mass(i),-exp_int(i)/norm
+      enddo
+      write(io_mass,*)'&'
+    endif
+
+  endif !ex
   
   
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!      
@@ -818,7 +799,6 @@ rd: do
   close(io_jcamp)
   
  ! compute deviation exp-theor.
-  
   if(exdat)then
 
     rms  = 0
@@ -826,15 +806,23 @@ rd: do
     kkk  = 0
     kkkk = 0
 
-    do i = 1, kk
-      k = iexp(1,i)
-      if ( iexp(2,i)/norm > 5.0_wp )then
-        r = 100.0_wp * tmass(k)/tmax - iexp(2,i)/norm
-        kkk = kkk + 1
-        if ( 100.0_wp * tmass(k)/tmax > 2.5_wp) kkkk = kkkk + 1
-        rms = rms + abs(r)
-      endif
-    enddo
+ol: do i = 1, exp_entries
+il:   do j = 1, list_length
+        if ( exp_int(i)/norm > 5.0_wp )then !.and. sorted_intensities(j) > 1.0_wp )then
+          if ( exp_mass(i) == nint(sorted_masses(j))) then
+            r = sorted_intensities(j) - (exp_int(i) / norm)
+            !write(*,*) i, exp_mass(i), exp_int(i)
+            !write(*,*) j, sorted_masses(j), sorted_intensities(j) 
+            !write(*,*) r
+            kkk = kkk + 1
+            if ( sorted_intensities(j) > 2.5_wp) kkkk = kkkk + 1
+            rms = rms + abs(r)
+          endif
+        endif
+      enddo il
+    enddo ol
+
+
     write(*,*)'MAD(exptl./theor.) = ', rms / kkk
     write(*,*)'# exptl. > 5 %     = ', kkk
     write(*,*)'% correctly found  = ', 100 * float(kkkk)/float(kkk)
@@ -849,16 +837,17 @@ rd: do
   ! compute mass spectral match score
   if(exdat)then 
     score = 0.0_wp
-    ! bring iexp to the right order of magnitude 
-    do i = 1, 10000
-      iexp(2,i) = iexp(2,i) / norm
- enddo
+    ! bring exp to the right order of magnitude 
+    do i = 1, exp_entries
+      exp_int(i) = exp_int(i) / norm
+    enddo
 
-    call match(tmass,iexp,score,tmax)
+  !  call match(sorted_masses, sorted_intensities, list_length, &
+  !              exp_entries, exp_mass, exp_int,score,tmax)
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
-    write(*,'(6F10.3)') score   
+   ! write(*,'(6F10.3)') score   
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)
     write(*,*)"Composite match score, see "
@@ -866,92 +855,65 @@ rd: do
     write(*,*)"For our implementation, see "
     write(*,*)"Bauer, C. A.; Grimme,S. J. Phys. Chem. A 2014, 118, 11479-11484"
     
-    ! Overlap score tried...but failes
-    !      call match2(tmass,iexp,score,1.0d0)
-    !      write(*,'(''overlap score'')')
-    !      write(*,'(6F10.3)') score
   
   endif 
    
 end program plotms
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-subroutine match2(tmass,iexp,score,alpha)
-  use xtb_mctc_accuracy, only: wp
-  implicit none
-
-  integer  :: i,j
-
-  real(wp) :: tmass(10000)
-!  real(wp) :: int_exp(10000)
-  real(wp) :: iexp(2,10000)
-  real(wp) :: score
-  real(wp) :: alpha
-
-  ! needed storage variables
-  real(wp) :: norm_experiment
-  real(wp) :: norm_calculation
-  real(wp) :: overlap
-  
-  !      int_exp = 0.0d0
-  !      do i=1,10000
-  !          print*,i,iexp(1,i),iexp(2,i)
-  !        if(i == iexp(1,i)) then
-  !          int_exp(int(iexp(1,i))) = iexp(2,i)
-  !        endif
-  !      enddo
-  
-  norm_experiment = 0.0d0
-  norm_calculation = 0.0d0
-  overlap = 0.0d0
-  do i = 1, 10000
-    do j = 1, 10000
-      norm_experiment = norm_experiment + (-1)**(i+j) * iexp(2,j) * iexp(2,i) * exp(-alpha*(i-j)**2)
-      norm_calculation = norm_calculation + (-1)**(i+j) * tmass(j) * tmass(i) * exp(-alpha*(i-j)**2)
-      overlap = overlap + (-1)**(i+j) * iexp(2,j) * tmass(i) * exp(-alpha * (i-j)**2)
-    enddo
-  enddo
-  
-  score = overlap / sqrt(norm_experiment * norm_calculation)
-  
-end subroutine match2
  
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-subroutine match(tmass,iexp,score,tmax)
+!subroutine match(tmass,iexp,score,tmax)
+subroutine match(sorted_masses, sorted_intensities, list_length, &
+                  exp_entries,  exp_mass, exp_int,score,tmax)
   use xtb_mctc_accuracy, only: wp
   implicit none
 
   integer :: i,j
   integer :: pp !peak pair number pp
   integer :: numcalc ! number of calculated peaks
+  integer :: list_length, exp_entries
 
   real(wp) :: tmass(10000)
-  real(wp) :: iexp(2,10000)
+  !real(wp) :: iexp(2,10000)
+  real(wp) :: exp_mass(exp_entries)
+  real(wp) :: exp_int(exp_entries)
   real(wp) :: score
   real(wp) :: tmax
   real(wp) :: w(2,10000) !weighted vectors
   real(wp) :: sum1,sum2,sum3,sum4,dot,fr
   real(wp) :: norm(2)
   real(wp) :: p(2,10000) ! peak pair matrix 
+  real(wp) :: sorted_masses(list_length), sorted_intensities(list_length)
 
   numcalc=0
   
-  do i = 1, 10000
-    if ( tmass(i) /= 0.0_wp ) numcalc = numcalc + 1
-  enddo
+  !do i = 1, 10000
+  !  if ( tmass(i) /= 0.0_wp ) numcalc = numcalc + 1
+  !enddo
+
+  numcalc = list_length
   
   !weighted spectral vectors, m**3, int**0.6 scaling
   w = 0.0_wp
-    do i = 1, 10000
-      do j = 1, 10000
-        if ( j == iexp(1, i) ) then
-          w(2,j) = j**2 * ( 1000.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
-          w(1,j) = iexp(1,i)**2 * iexp(2,i)**0.6_wp
-        endif
-      enddo
-    enddo
+    !do i = 1, 10000
+    !  do j = 1, 10000
+    !    if ( j == iexp(1, i) ) then
+    !      w(2,j) = j**2 * ( 1000.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
+    !      w(1,j) = iexp(1,i)**2 * iexp(2,i)**0.6_wp
+    !    endif
+    !  enddo
+    !enddo
+  !do i = 1, 10000
+ol: do i = 1, exp_entries
+il:  do j = 1, list_length
+       if ( sorted_masses(j) == exp_mass(i) ) then
+        !w(2,j) = j**2 * ( 100.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
+        w(2,j) = j**2 * ( sorted_intensities(j) )**0.6_wp ! changed this to 1000 <- check it!
+        w(1,j) = exp_mass(i)**2 * exp_int(i)**0.6_wp
+      endif
+    enddo il
+  enddo ol
   
   norm = 0.0_wp
   do i = 1, 10000
@@ -986,10 +948,11 @@ subroutine match(tmass,iexp,score,tmax)
   w=0.0_wp
 
   do i = 1, 10000
-     do j = 1, 10000
-        if ( j == iexp(1,i) ) then
-           w(2,j) = 100.0_wp * tmass(j) / tmax
-           w(1,j) = iexp(2,i)
+     !do j = 1, 10000
+     do j = 1, list_length
+        if ( j == exp_mass(i) ) then
+           w(2,j) = sorted_intensities(j) !100.0_wp * tmass(j) / tmax
+           w(1,j) = exp_int(i)
         endif
      enddo
   enddo

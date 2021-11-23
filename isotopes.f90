@@ -17,7 +17,7 @@ module isotope_pattern
   contains
 
 subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
-    nsig, no_isotopes, index_mass, exact_intensity, isotope_masses, z_chrg )
+    nsig, no_isotopes, index_mass, exact_intensity, isotope_masses)
 
   integer :: ntot,iat_save(*),nsig,maxatm
   integer :: mass(*)
@@ -30,7 +30,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
 !  integer :: tmp_intensity
   integer :: store_int(1000)
   integer :: mzmin
-  integer :: z_chrg
 
   real(wp) :: mint(*)
   real(wp) :: rnd(nrnd,maxatm)
@@ -481,7 +480,7 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
       nmass(imass) = nmass(imass) + 1
 
       save_mass(n) = xmass
-      current_mass = xmass / real(abs(z_chrg),wp)
+      current_mass = xmass 
 
       there = .true.
       if ( current_mass > mzmin ) then 
@@ -537,22 +536,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
     !write(*,*) exact_intensity(loop)
   enddo
 
-
- ! write(*,*) 'ISO'
-  !write(*,*) 
-  !write(*,*) 'store_int'
-  !do loop = 1, index_mass
-    !write(*,*) isotope_masses(loop), exact_intensity(loop)
-  !  write(*,*) loop, exact_intensity(loop)
-  !enddo
-  !write(*,*) 
-
-
-  !nsig = index_mass
-  !write(*,*) nsig
-
-  !< verteilung -> größtest haupt, rest + integer?
-  !main_peak = maxloc(exact_intensity)
 
 
   
