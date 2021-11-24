@@ -85,19 +85,18 @@ program plotms
   real(wp) :: list_masses(10000)
   real(wp) :: intensity(10000)
 
-  logical  :: sel,echo,exdat,mpop,small
+  logical  :: sel,verbose,exdat,mpop,small
   logical  :: ex,ex1,ex2,ex3,ex4
   logical  :: noIso, Plasma
+  logical :: args = .false.
   
   ! fname=<qcxms.res> or result file, xname contains the mass.agr plot file
   character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
-  !character(len=:), allocatable  :: Frag_Name
-  character(len=20), dimension(20)  :: Frag_Name
 
   mpop          = .false.
-  echo          = .false.
+  verbose          = .false.
   small         = .false.
   isec          = 0
   norm          = 1.0
@@ -128,6 +127,7 @@ program plotms
   do i=1,9
      arg(i)=' '
     call get_command_argument(i,arg(i))
+    if (arg(i) /= ' ') args = .true. 
   enddo
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   
@@ -148,7 +148,7 @@ program plotms
   
   do i = 1, 9
      if(index(arg(i),'-a') /= 0)  cthr   = -1000.0_wp
-     if(index(arg(i),'-v') /= 0)  echo   = .true.
+     if(index(arg(i),'-v') /= 0)  verbose   = .true.
      if(index(arg(i),'-f') /= 0)  fname  = arg(i+1)
      if(index(arg(i),'-p') /= 0)  noIso  = .true.
 
@@ -246,53 +246,60 @@ program plotms
   write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
   write(*,'(6x,''*    QCxMS spectra plotting tool  *'')')
   write(*,'(6x,''*          -  v. 6.0  -           *'')')
-  write(*,'(6x,''*          22. Nov 2021           *'')')
+  write(*,'(6x,''*          24. Nov 2021           *'')')
   write(*,'(6x,''*           *   *   *             *'')')
   write(*,'(6x,''*           S. Grimme             *'')')
   write(*,'(6x,''*           J. Koopman            *'')')
   write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
   write(*,'(6x,''   Contributor:  C.Bauer, T.Kind   '')')
   write(*,*)
-  write(*,'(6x,''      -> Reading file: '',(a)         )')trim(fname)
+  write(*,'(6x,''   -> Reading file: '',(a)         )')trim(fname)
+  if (verbose) write(*,'(6x ''   -> xmgrace file body '',(a)         )')trim(xname)
   write(*,*)
   write(*,*)
   
   ! ------------------------------------------------------------------------------------------------------!
   ! execute arguments
-  
-  write(*,'(''!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '')')
-  write(*,'('' The following settings are being used :  '')')
-  write(*,*)
-  write(*,'('' - xmgrace file body '',(a)         )')trim(xname)
+ 
+  if (args) then
+    write(*,'(50(''!''))')
+    write(*,'('' The following settings are being used :  '')')
+    write(*,*)
 
-  ! -w
-  if(chrg_wdth > 0)then
-    write(*,'('' - Broadening of the charges by an SD, wdth :'',f4.1)')chrg_wdth*100.
-  endif
-  
-  ! -s
-  if(isec /= 0)then
-    write(*,'('' - Taking only secondary, tertiary ... fragmentations '')') isec
-  endif
-  
-  ! -m
-  if(mzmin > 10)then
-    write(*,'('' - Only m/z values greater than '',i4,'' are considered'')') mzmin
-  endif
+    ! -w
+    if(chrg_wdth > 0)then
+      write(*,'('' - Broadening of the charges by an SD, wdth :'',f4.1)')chrg_wdth*100.
+    endif
+    
+    ! -s
+    if(isec /= 0)then
+      write(*,'('' - Taking only secondary, tertiary ... fragmentations '')') isec
+    endif
+    
+    ! -m
+    if(mzmin > 10)then
+      write(*,'('' - Only m/z values greater than '',i4,'' are considered'')') mzmin
+    endif
 
-  ! -i
-  if ( min_intensity > 0.0_wp ) then 
-    write(*,'('' - Minimum signal intensity: '',f7.4,'' % (relative)'')') min_intensity
-  endif
+    ! -i
+    if ( min_intensity > 0.0_wp ) then 
+      write(*,'('' - Minimum signal intensity: '',f7.4,'' % (relative)'')') min_intensity
+    endif
 
-  ! -t (choose if unity intensities or normal)
-  if(cthr >= 0)then
-    write(*,'('' - couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
-  else
-    write(*,'('' - counting all fragments with unity charge (frag. overview)'')')
+    ! -p 
+    if ( noIso ) then 
+      write(*,'('' - No isotope pattern calculated '')') 
+    endif
+
+    ! -t (choose if unity intensities or normal)
+    if(cthr >= 0)then
+      write(*,'('' - couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
+    else
+      write(*,'('' - counting all fragments with unity charge (frag. overview)'')')
+    endif
+    write(*,*)
+    write(*,'(50(''!''))')
   endif
-  write(*,*)
-  write(*,'(''!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '')')
 
   ! ------------------------------------------------------------------------------------------------------!
   tmass = 0
@@ -635,7 +642,7 @@ rd: do
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
  
   !> verbose information -> not yet available anymore with acc masses
-  !if(echo)then
+  !if(verbose)then
   !  write(*,*)'mass % intensity  counts   Int. exptl'
   !  do i = 1, list_length !count_mass
   !     if (sorted_masses(i) > mzmin) then
@@ -841,6 +848,13 @@ il:   do j = 1, list_length
     do i = 1, exp_entries
       exp_int(i) = exp_int(i) / norm
     enddo
+
+    write(*,*) 
+    write(*,*) ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
+    write(*,*) ' - NIST mass comparison not supported in v6.0 - '
+    write(*,*) '   -    no automatic score comparison       -'
+    stop       ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
+
 
   !  call match(sorted_masses, sorted_intensities, list_length, &
   !              exp_entries, exp_mass, exp_int,score,tmax)
