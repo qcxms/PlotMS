@@ -41,19 +41,17 @@ program plotms
   use xtb_mctc_symbols, only: toSymbol
   implicit none
 
- !treat i,j,k,l,m,n as integers and all other variables as real (?!?!)
-  integer :: n,m,i,j,k,kk,kkk,kkkk,nn,ntot,nsig
+  integer :: n,i,j,k,kk,kkk,kkkk,nn,ntot
   integer :: atm_types
-  integer :: maxatm,imax,imin,nagrfile,spec,io
+  integer :: maxatm,imax,imin,nagrfile
+  integer :: spec
   integer :: iat  (10000)
   integer :: nat  (10000)
   integer :: iat_save (10000)
-  integer :: mass (1000)! maximum mass = 10000
   integer :: isec,jcoll,jsec,ial,jal(0:10),kal(0:30),nf,irun,mzmin
   integer :: maxrun
   ! TK number of peaks in in-silico spectra, needed for JCAMP-DX export
-  integer :: numspec
-  integer :: io_spec, io_raw, io_mass, io_csv, io_exp, io_jcamp
+  integer :: io, io_spec, io_raw, io_mass, io_csv, io_exp, io_jcamp
   integer :: counter
   integer :: z_chrg
   integer :: index_mass, count_mass, sum_index
@@ -62,40 +60,35 @@ program plotms
   integer :: exp_entries
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
-  real(wp) :: chrg,chrg2,dum,checksum,score
-  !real(wp) :: exp_mass (10000)
-  !real(wp) :: exp_int  (10000)
-  real(wp) :: mint (1000)
-  real(wp) :: tmass(10000) ! tmass contains abundances (real) for each unit mass (i)
+  real(wp) :: chrg,chrg2,checksum,score
+  !real(wp) :: dum
   real(wp) :: chrg_wdth
   real(wp) :: total_charge
   real(wp) :: lowest
   real(wp) :: min_intensity 
   real(wp), allocatable :: exp_mass (:)
   real(wp), allocatable :: exp_int  (:)
-  real(wp), allocatable :: exp_list(:,:) 
   real(wp), allocatable :: reduced_intensities(:), reduced_masses(:)
   real(wp), allocatable :: sorted_masses(:), sorted_intensities(:)
   real(wp), allocatable :: exact_intensity(:)
   real(wp), allocatable :: isotope_masses(:)
   real(wp), allocatable :: rnd(:,:)
-  real(wp), allocatable :: checksum2(:), save_mass(:)
+  real(wp), allocatable :: checksum2(:)
   !real(wp), allocatable :: list_masses(:)
   !real(wp), allocatable :: intensity(:)
   real(wp) :: list_masses(10000)
   real(wp) :: intensity(10000)
 
-  logical  :: sel,verbose,exdat,mpop,small
+  logical  :: sel,verbose,exdat,small
   logical  :: ex,ex1,ex2,ex3,ex4
   logical  :: noIso, Plasma
-  logical :: args = .false.
+  logical  :: args = .false.
   
   ! fname=<qcxms.res> or result file, xname contains the mass.agr plot file
   character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
 
-  mpop          = .false.
   verbose          = .false.
   small         = .false.
   isec          = 0
@@ -302,7 +295,6 @@ program plotms
   endif
 
   ! ------------------------------------------------------------------------------------------------------!
-  tmass = 0
   maxrun = 0
   i=1
   maxatm=0
@@ -355,8 +347,7 @@ program plotms
   !write(*,*) 'The maximum charge of the system is ', total_charge
 
   !> allocate the variables
-  allocate (checksum2(maxrun), &
-    &       save_mass(counter))
+  allocate (checksum2(maxrun))
 
   n = i - 1  ! n = no. of fragments with amount maxatm of atoms
   
@@ -393,7 +384,6 @@ program plotms
   kal       = 0
   checksum  = 0.0_wp
   checksum2 = 0.0_wp
-  save_mass = 0.0_wp
   index_mass= 0
   intensity = 0
   count_mass = 0
@@ -469,8 +459,8 @@ program plotms
     
       !> compute isotope patterns via monte carlo and save intensites 
       !  of all possible combinations 
-      call isotope (counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
-        nsig, noIso, index_mass, exact_intensity, isotope_masses)
+      call isotope (counter, mzmin, ntot, iat_save, maxatm, rnd, &
+        noIso, index_mass, exact_intensity, isotope_masses)
 
       !>> distribute charge (if set as input)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
@@ -495,7 +485,7 @@ program plotms
   !> find the highest intensity
   tmax = maxval(intensity)
 
-  intensity(:) = intensity(:)/tmax * 100.0_wp
+  intensity(:) = intensity(:)/tmax * 1000.0_wp
 
   allocate(reduced_masses(count_mass), reduced_intensities(count_mass))
 
@@ -596,10 +586,8 @@ rd: do
         call readl(line,xx,nn)
         exp_entries = nint(xx(nn))
         !write(*,*) 'EXP ENTRIES', exp_entries
-        !allocate (exp_list(2,exp_entries))
         allocate (exp_mass(exp_entries), &
           &       exp_int(exp_entries))
-        !allocate (exp_list(2,exp_entries))
       endif
   
       if(index(line,'##PEAK TABLE') /= 0)then
@@ -636,7 +624,7 @@ rd: do
   imin = mzmin
 
   !> get the maximum m/z value that is to be plotted
-  imax = nint(maxval(sorted_masses))
+  imax = nint(maxval(sorted_masses/10.0_wp))
 
   ! counts of structures in the 100% peak
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
@@ -689,14 +677,14 @@ rd: do
   write(io_jcamp,"(A)")'##YUNITS=RELATIVE INTENSITY'
   
   !> number of in-silico spectra
-  write(io_jcamp,'(A, I0)')'##NPOINTS=' , list_length   !numspec
+  write(io_jcamp,'(A, I0)')'##NPOINTS=' , list_length   
   write(io_jcamp,"(A)")'##PEAK TABLE=(XY..XY) 1'
   
   !       >>>> Write out the results into the files <<<<         !
   do i = 1, list_length 
-    write(io_csv,  '(f12.6, 1x, a1, 3x, f22.18)')  &
+    write(io_csv,  '(f12.6, 1x, a1, 3x, f26.18)')  &
       sorted_masses(i),',', sorted_intensities(i) 
-    write(io_jcamp,'(f12.6,4x, f22.18)')           &
+    write(io_jcamp,'(f12.6,4x, f26.18)')           &
       sorted_masses(i),     sorted_intensities(i) 
   enddo
 
@@ -756,7 +744,7 @@ rd: do
  
     !> Write out the results into the mass.agr file !
     do i = 1, list_length ! count_mass 
-      write(io_mass,*) sorted_masses(i), sorted_intensities(i) 
+      write(io_mass,*) sorted_masses(i), sorted_intensities(i)/10.0_wp 
     enddo
 
     write(io_mass,*)'&'
@@ -853,7 +841,6 @@ end program plotms
  
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-!subroutine match(tmass,iexp,score,tmax)
 subroutine match(sorted_masses, sorted_intensities, list_length, &
                   exp_entries,  exp_mass, exp_int,score,tmax)
   use xtb_mctc_accuracy, only: wp
@@ -864,7 +851,7 @@ subroutine match(sorted_masses, sorted_intensities, list_length, &
   integer :: numcalc ! number of calculated peaks
   integer :: list_length, exp_entries
 
-  real(wp) :: tmass(10000)
+  !real(wp) :: tmass(10000)
   !real(wp) :: iexp(2,10000)
   real(wp) :: exp_mass(exp_entries)
   real(wp) :: exp_int(exp_entries)
@@ -941,7 +928,7 @@ il:  do j = 1, list_length
      !do j = 1, 10000
      do j = 1, list_length
         if ( j == exp_mass(i) ) then
-           w(2,j) = sorted_intensities(j) !100.0_wp * tmass(j) / tmax
+           w(2,j) = sorted_intensities(j) 
            w(1,j) = exp_int(i)
         endif
      enddo

@@ -3,7 +3,6 @@
   ! compute the isotopic mass distribution for
   ! given chemical formula (ntot atoms with OZ iat_save())
   ! returns nsig masses in mass() with probability
-  ! mint()
   ! this is a quick and dirty MC algorithm and its run-time depends
   ! critically on the number of trials nrnd
   
@@ -16,14 +15,13 @@ module isotope_pattern
 
   contains
 
-subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
-    nsig, no_isotopes, index_mass, exact_intensity, isotope_masses)
+subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
+    no_isotopes, index_mass, exact_intensity, isotope_masses)
 
-  integer :: ntot,iat_save(*),nsig,maxatm
-  integer :: mass(*)
+  integer :: ntot,iat_save(*),maxatm
   integer :: niso(200)
   integer :: nmass(10000)
-  integer :: n,i,j,iso,imass,isum,k,iti
+  integer :: n,i,j,iso,imass,iti
   integer :: counter
   integer,parameter :: nrnd = 50000 
   integer :: loop, index_mass
@@ -31,7 +29,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
   integer :: store_int(1000)
   integer :: mzmin
 
-  real(wp) :: mint(*)
   real(wp) :: rnd(nrnd,maxatm)
   real(wp) :: r,sum_prob
   real(wp) :: prob(200,10),massiso(200,10),p1,p2,x,xmass
@@ -340,6 +337,19 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
           niso(53)        = 1          
           prob(53,1)      = 100.00_wp
           massiso(53,1)   = 126.904473_wp
+
+   ! 74 W (Tungsten)
+          niso(74)        = 5          
+          prob(74,1)      = 0.12_wp
+          prob(74,2)      = 26.50_wp
+          prob(74,3)      = 14.31_wp
+          prob(74,4)      = 30.64_wp
+          prob(74,5)      = 28.43_wp
+          massiso(74,1)   = 179.946704_wp
+          massiso(74,2)   = 181.948204_wp
+          massiso(74,3)   = 182.950223_wp
+          massiso(74,4)   = 183.950931_wp
+          massiso(74,5)   = 185.954364_wp
                                
    ! 78 Pt (Platinum)
           niso(78)        = 5          
@@ -394,7 +404,7 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
           prob(83,1)      = 100.0_wp
           massiso(83,1)   = 208.980398_wp
            
-                                                                                                                                                                                                    
+
   ! postprocessing starts here 
   
   prob = prob * 0.01_wp
@@ -536,21 +546,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, mass, mint, &
     !write(*,*) exact_intensity(loop)
   enddo
 
-
-
-  
-  isum = sum(nmass)
-  k = 0
-  do i = 1, 2000
-     if ( nmass(i) > 0 ) then
-        k = k + 1
-        mass(k) = i
-        mint(k) = float(nmass(i)) / float(isum)
-        !write(*,*) k, mint(k)
-     endif
-  enddo
- 
-  nsig = k
 
 
 end subroutine isotope
