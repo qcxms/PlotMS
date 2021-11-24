@@ -53,7 +53,7 @@ program plotms
   integer :: maxrun
   ! TK number of peaks in in-silico spectra, needed for JCAMP-DX export
   integer :: numspec
-  integer :: io_spec, io_raw, io_mass, io_exp, io_jcamp
+  integer :: io_spec, io_raw, io_mass, io_csv, io_exp, io_jcamp
   integer :: counter
   integer :: z_chrg
   integer :: index_mass, count_mass, sum_index
@@ -660,8 +660,11 @@ rd: do
   !  enddo
   !endif
   
-  ! when the template exists
-  
+  !> print out comma-separated-values
+  open( file= 'result.csv', newunit = io_csv, status='replace')
+
+
+  !> when the template exists
   inquire(file=xname, exist=ex)
   if(ex)then
     open(file=xname, newunit=io_raw)
@@ -719,6 +722,7 @@ rd: do
       !write(*,*) i, sorted_masses(i), sorted_intensities(i) !/ tmax
       !write(io_mass,*) sorted_masses(i), 100.0_wp * (sorted_intensities(i) / tmax)
       write(io_mass,*) sorted_masses(i), sorted_intensities(i) 
+      write(io_csv,*) sorted_masses(i),' , ', sorted_intensities(i) 
     enddo
 
     write(io_mass,*)'&'
@@ -839,6 +843,7 @@ il:   do j = 1, list_length
   close(io_spec)
   close(io_raw)
   close(io_mass)
+  close(io_csv)
   close(io_jcamp)
   
   ! compute mass spectral match score
