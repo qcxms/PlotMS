@@ -641,6 +641,7 @@ rd: do
   ! counts of structures in the 100% peak
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
  
+  !----------------------------------------------------------------------------- 
   !> verbose information -> not yet available anymore with acc masses
   !if(verbose)then
   !  write(*,*)'mass % intensity  counts   Int. exptl'
@@ -659,10 +660,51 @@ rd: do
   !     endif
   !  enddo
   !endif
-  
-  !> print out comma-separated-values
-  open( file= 'result.csv', newunit = io_csv, status='replace')
+  !----------------------------------------------------------------------------- 
 
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! P  R  I  N  T  
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  write(*,*)
+  write(*,'(''  Writing ...'')')
+  !> print out comma-separated-value (csv) file
+
+  write(*,'('' - result.csv file'')')
+  open( file = 'result.csv', newunit = io_csv,   status='replace')
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !> print out JCAMP file
+
+  write(*,'('' - result.jdx file'')')
+  open( file = 'result.jdx', newunit = io_jcamp, status='replace')
+
+  ! TK minimum JCAMP-DX header
+  write(io_jcamp,"(A)")'##TITLE=Theoretical in-silico spectrum (QCxMS)'
+  write(io_jcamp,"(A)")'##JCAMP-DX=4.24'
+  write(io_jcamp,"(A)")'##DATA TYPE=MASS SPECTRUM'
+  
+  write(io_jcamp,"(A)")'##XUNITS=M/Z'
+  write(io_jcamp,"(A)")'##YUNITS=RELATIVE INTENSITY'
+  
+  !> number of in-silico spectra
+  write(io_jcamp,'(A, I0)')'##NPOINTS=' , list_length   !numspec
+  write(io_jcamp,"(A)")'##PEAK TABLE=(XY..XY) 1'
+  
+  !       >>>> Write out the results into the files <<<<         !
+  do i = 1, list_length 
+    write(io_csv,  '(f12.6, 1x, a1, 3x, f22.18)')  &
+      sorted_masses(i),',', sorted_intensities(i) 
+    write(io_jcamp,'(f12.6,4x, f22.18)')           &
+      sorted_masses(i),     sorted_intensities(i) 
+  enddo
+
+  write(io_jcamp,"(A)")'##END='
+
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !> print out XMGRACE file
 
   !> when the template exists
   inquire(file=xname, exist=ex)
@@ -672,11 +714,8 @@ rd: do
     ! Original file called .mass_raw.agr
     if(       small ) open( file='small_mass.agr', newunit=io_mass)
     if( .not. small ) open( file='mass.agr',       newunit=io_mass)
-    !open(unit=9,file='intensities.txt')
   
-    ! my xmgrace file mass.agr has nagrfile lines
-    write(*,*)
-    write(*,*) 'Writing mass.agr ...'
+    write(*,'('' - mass.agr file'')')
     do i = 1, nagrfile
       read (io_raw,'(a)') line
       if( .not. small )then 
@@ -715,23 +754,14 @@ rd: do
       write(io_mass,'(a)')line
     enddo
  
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! Write out the results into the mass.agr file !
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !> Write out the results into the mass.agr file !
     do i = 1, list_length ! count_mass 
-      !write(*,*) i, sorted_masses(i), sorted_intensities(i) !/ tmax
-      !write(io_mass,*) sorted_masses(i), 100.0_wp * (sorted_intensities(i) / tmax)
       write(io_mass,*) sorted_masses(i), sorted_intensities(i) 
-      write(io_csv,*) sorted_masses(i),' , ', sorted_intensities(i) 
     enddo
 
     write(io_mass,*)'&'
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  
-  
     ! TK establish again if exdat (experimental JCAMPDX) exists
-    ! TK @target G0.S1 means upper theory spectrum in current implementation
-    ! TK @target G0.S2 means lower experimental spectrum
     ! TK exp_mass(i) - contains the exp masses and  exp_int(i) contains the abundance
     ! TK  exp_entries contains number of experimental spectra
   
@@ -745,69 +775,10 @@ rd: do
     endif
 
   endif !ex
+
   
-  
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!      
-  ! TK here we export the spectrum to JCAMP-DX, subroutine would be better for
-  ! TK allowing later code merges or inclusion of new and missing elements such as
-  ! TK currently unit mass only
-  
-  write(*,*) 'Writing JCAMP file: result.jdx ...'
-  write(*,*)
-  ! TK open file as JCAMP-DX MS result file, open new or replace
-  open( file='result.jdx', STATUS="REPLACE", newunit=io_jcamp)
-  
-  ! TK minimum JCAMP-DX header
-  write(io_jcamp,"(A)")'##TITLE=Theoretical in-silico spectrum (QCxMS)'
-  write(io_jcamp,"(A)")'##JCAMP-DX=4.24'
-  write(io_jcamp,"(A)")'##DATA TYPE=MASS SPECTRUM'
-  
-  !write(io_jcamp,*)'##MOLFORM=C13 H22 O3 Si2'
-  !write(io_jcamp,*)'##MW=282'
-  write(io_jcamp,"(A)")'##XUNITS=M/Z'
-  write(io_jcamp,"(A)")'##YUNITS=RELATIVE INTENSITY'
-  !write(io_jcamp,*)'##XFACTOR=1'
-  !write(io_jcamp,*)'##YFACTOR=1'
-  !write(io_jcamp,*)'##FIRSTX=15'
-  !write(io_jcamp,*)'##LASTX=281'
-  !write(io_jcamp,*)'##FIRSTY=20'
-  !write(io_jcamp,*)'##MAXX=281'
-  !write(io_jcamp,*)'##MINX=15'
-  !write(io_jcamp,*)'##MAXY=9999'
-  !write(io_jcamp,*)'##MINY=10'
-  
-  ! TK calculate number of in-silico spectra
-  ! TK new: numspec = idint(tmax) ** not related to number ofr spectral peaks
-  numspec = 0
-  do i=10,10000
-    if(tmass(i) /= 0)then
-      numspec = numspec + 1
-    endif
-  enddo
-  
-  
-  write(io_jcamp,'(A, I0)')'##NPOINTS=' ,numspec
-  
-  ! TK ##XYDATA=(XY..XY) 1 designates one line per m/z abd pair
-  ! TK separated by comma
-  ! TK 1.500000e+001 ,5.000000e+000
-  
-  write(io_jcamp,"(A)")'##PEAK TABLE=(XY..XY) 1'
-  !15,20 26,10 27,20 29,50
-  
-  
-  do i=10,10000
-       if(tmass(i) /= 0)then
-         ! unit mass to exact mass
-         ! write(io_jcamp,"(I4, I8)") i, int(100.*tmass(i)/tmax)
-         write(io_jcamp,"(F12.6, I8)") real(i), int(100.0_wp * tmass(i)/tmax)
-       endif
-  enddo
-  
-  write(io_jcamp,"(A)")'##END='
-  
-  ! TK close the JCAMP-DX file
-  close(io_jcamp)
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   
  ! compute deviation exp-theor.
   if(exdat)then
