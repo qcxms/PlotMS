@@ -38,6 +38,7 @@ program plotms
   use qcxms_boxmuller, only: vary_energies
   use qcxms_readcommon
   use xtb_mctc_accuracy, only: wp
+  use xtb_mctc_convert
   use xtb_mctc_symbols, only: toSymbol
   implicit none
 
