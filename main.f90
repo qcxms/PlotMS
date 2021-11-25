@@ -488,6 +488,8 @@ program plotms
 
   list_length=0
 
+  if (z_chrg == 1) extra_mass = z_chrg * amutoau 
+
   !> find the highest intensity
   tmax = maxval(intensity)
 
