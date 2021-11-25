@@ -9,7 +9,16 @@ Put the *.mass_raw.agr* file into your *$HOME* folder.
 
 **Compiling**
 
-Download the source code. Go into the created folder and run `make`.
+Using **meson** as build system requires you to install a fairly new version like 0.57.2 or newer. 
+To use the default backend of meson you have to install **ninja** version 1.10 or newer.
+
+```bash
+export FC=ifort CC=icc
+meson setup build -Dfortran_link_args=-static
+ninja -C build 
+```
+Copy the binary from the *build/plotms* file into a directory in your path, e.g. *~/bin/*.
+
 
 **Running the script**
 
