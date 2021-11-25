@@ -827,12 +827,12 @@ il:   do j = 1, list_length
     stop       ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
 
 
-  !  call match(sorted_masses, sorted_intensities, list_length, &
-  !              exp_entries, exp_mass, exp_int,score,tmax)
+    call match(sorted_masses, sorted_intensities, list_length, &
+                exp_entries, exp_mass, exp_int,score,tmax)
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
-   ! write(*,'(6F10.3)') score   
+    write(*,'(6F10.3)') score   
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)
     write(*,*)"Composite match score, see "
@@ -995,7 +995,7 @@ subroutine calcfr(pp,pair,sum4)
   
   sum4 = 0.0_wp
   
-  do i = 1, pp
+  do i = 2, pp
      if     (abs((pair(1,i) * pair(2,i-1)) / (pair(1,i-1) * pair(2,i)))   < 1.0_wp)then
   
         sum4 = sum4 + (pair(1,i) * pair(2,i-1)) / (pair(1,i-1) * pair(2,i))
