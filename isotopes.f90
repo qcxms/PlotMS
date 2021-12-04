@@ -20,8 +20,7 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
 
   integer :: ntot,iat_save(*),maxatm
   integer :: niso(200)
-  integer :: nmass(10000)
-  integer :: n,i,j,iso,imass,iti
+  integer :: n,i,j,iso,iti
   integer :: counter
   integer,parameter :: nrnd = 50000 
   integer :: loop, index_mass
@@ -410,7 +409,9 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   prob = prob * 0.01_wp
   save_mass = 0.0_wp
   list_masses = 0.0_wp
-  index_mass = 1
+  index_mass = 0
+  loop = 0
+  store_int = 0.0_wp
 
   !  Has to be done only once to check for correct isotope entries
   !> loop over all mases to element 83 (Bismuth)
@@ -441,15 +442,12 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   enddo
 
 
-
   !Calculate NO isotope pattern
   if ( no_isotopes ) then 
-    nmass = 0
-    !do n=1,nrnd ! I commented this out, because I see no effects on the spectrum  
     xmass=0
     do i = 1, ntot
       iti = iat_save(i)
-      p1 = 0.0
+      p1 = 0.0_wp
       do iso = 1, niso(iti)
          if ( prob(iti,iso) > p1 ) then
            x = massiso(iti,iso)
@@ -458,23 +456,50 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
       enddo
       xmass = xmass + x
     enddo
-    imass = nint(xmass)                  ! here it gets to integers - changed to nearest int nint
-    nmass(imass) = nmass(imass)+1
-    !enddo
+      current_mass = xmass !/ real(abs(z_chrg),wp)
+
+      there = .true.
+      if ( current_mass > mzmin ) then 
+        !> loop over all entries in the list
+noiso:  do 
+          loop = loop + 1
+          !>> write if there is no entry
+          if ( list_masses(loop) == 0.0_wp ) then
+            there = .false.
+            exit noiso
+          !>> true if already in list, end
+          elseif     ( abs(list_masses(loop) - current_mass) < 1.0d-10 ) then
+            there = .true.
+            store_int(loop) = store_int(loop) + 1
+            exit noiso
+          !>> false if not in list, store
+          elseif     ( abs(list_masses(loop) - current_mass) > 1.0d-10 ) then
+            there = .false.
+            cycle noiso
+          endif
+        enddo noiso
+        loop = 0
+
+        !> if it is not in the list, add it
+        if ( .not. there ) then
+          index_mass = index_mass + 1
+          list_masses(index_mass) = current_mass
+          store_int(index_mass) = store_int(index_mass) + 1
+          !write(*,*) list_masses(index_mass)
+        endif
+
+      endif
 
   ! Calculate isotope pattern
   else                      
 
     ! loop over random number runs
-    nmass = 0
-
-
     do n = 1, nrnd
       xmass = 0
       do i = 1, ntot
          iti = iat_save(i)
          r = rnd(n,i)
-         p1 = 0.0
+         p1 = 0.0_wp
          p2 = prob(iti,1)
          do iso = 1, niso(iti)
             if ( r >= p1 .and. r <= p2 ) then
@@ -486,53 +511,47 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
          enddo
          xmass = xmass + x
       enddo
-      imass = nint(xmass)                  ! here it gets to integers - changed to nearest int nint
-      nmass(imass) = nmass(imass) + 1
 
-      save_mass(n) = xmass
-      current_mass = xmass 
+      current_mass = xmass !/ float(abs(z_chrg))
 
       there = .true.
+      !> only values larger than user input 
       if ( current_mass > mzmin ) then 
+
         !> loop over all entries in the list
-        do loop = 1, index_mass
-          !>> true if already in list, end
-          if     ( list_masses(loop) == current_mass ) then
-            there = .true.
-            exit
-          !>> false if not in list, store
-          elseif ( list_masses(loop) /= current_mass ) then
+inner:  do 
+          loop = loop + 1
+
+          !>> write if there is no entry
+          if ( list_masses(loop) == 0.0_wp ) then
             there = .false.
+            exit inner
+          !>> true if already in list, end
+          elseif  ( abs(list_masses(loop) - current_mass) < 1.0d-10 ) then
+            there = .true.
+            store_int(loop) = store_int(loop) + 1
+            exit inner
+          !>> false if not in list, store
+          elseif     ( abs(list_masses(loop) - current_mass) > 1.0d-10 ) then
+            there = .false.
+            cycle inner
           endif
-        enddo
+        enddo inner
+        loop = 0
 
         !> if it is not in the list, add it
         if ( .not. there ) then
-          !index_mass = index_mass + 1
-          list_masses(index_mass) = current_mass
-          !write(*,*) list_masses(index_mass)
-        endif
-
-        !!> count the number of signals
-        do loop = 1, index_mass
-
-          if (list_masses(loop) == current_mass) then
-            store_int(loop) = store_int(loop) + 1
-            !write(*,*) store_int(loop)
-          endif
-
-        enddo
-
-        if ( .not. there ) then
           index_mass = index_mass + 1
-          there = .true.
+          list_masses(index_mass) = current_mass
+          store_int(index_mass) = store_int(index_mass) + 1
+          !write(*,*) list_masses(index_mass)
         endif
       endif
 
 
     enddo
   endif
-  index_mass = index_mass - 1
+
 
   allocate(exact_intensity(index_mass))
   allocate(isotope_masses(index_mass))

@@ -239,7 +239,7 @@ program plotms
   write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
   write(*,'(6x,''*    QCxMS spectra plotting tool  *'')')
   write(*,'(6x,''*          -  v. 6.0  -           *'')')
-  write(*,'(6x,''*          24. Nov 2021           *'')')
+  write(*,'(6x,''*          04. Dec 2021           *'')')
   write(*,'(6x,''*           *   *   *             *'')')
   write(*,'(6x,''*           S. Grimme             *'')')
   write(*,'(6x,''*           J. Koopman            *'')')
@@ -624,7 +624,7 @@ rd: do
   imin = mzmin
 
   !> get the maximum m/z value that is to be plotted
-  imax = nint(maxval(sorted_masses/10.0_wp))
+  imax = nint(maxval(sorted_masses))
 
   ! counts of structures in the 100% peak
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
