@@ -238,7 +238,7 @@ program plotms
   write(*,'(6x,''*           P l o t M S           *'')')
   write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
   write(*,'(6x,''*    QCxMS spectra plotting tool  *'')')
-  write(*,'(6x,''*          -  v. 6.0  -           *'')')
+  write(*,'(6x,''*         -  v. 6.0.1  -          *'')')
   write(*,'(6x,''*          04. Dec 2021           *'')')
   write(*,'(6x,''*           *   *   *             *'')')
   write(*,'(6x,''*           S. Grimme             *'')')

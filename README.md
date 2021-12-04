@@ -1,6 +1,6 @@
 # PlotMS for QCxMS
 
-**Plot** **M**ass **S**pectra (PlotMS) plotting program for the QCxMS program. 
+**Plot** **M**ass **S**pectra (PlotMS) plotting program for the [QCxMS program](https://github.com/qcxms/QCxMS). 
 
 **Installation**
 
