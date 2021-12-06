@@ -129,17 +129,19 @@ program plotms
   ! start loop processing aruments
   
   !  comand line parameters
-  !  -a count charges from -1000 (cthr) to cthr2
-  !  -v print spectra "mass % intensity  counts   Int. exptl" to stdout;
-  !     with "Int. exptl" (experimental) taken from exp.dat but not all exp peaks are exported
-  !     if no theoretical counterpart exists
-  !  -f filename or  -f <name_of_res_file>
-  !  -t couting ions with charge x to y (give the value, e.g. "-t 1 2" for charge 1 to 2)
-  !  -w broadening the charges by an SD 
-  !  -s Take only secondary and tertiary fragmentations (give the value, e.g. "-s 2" for secondary)
-  !  -m set minimum value for m/z, so 100% value will be calc. for higher values (x-axis)
-  !  -i set the minimum rel. intensity at which the signals are counted          (y-axis)
-  !  -p DO NOT calculate isotope pattern
+  !> -a count charges from -1000 (cthr) to cthr2
+  !> -v print spectra "mass % intensity  counts   Int. exptl" to stdout;
+  !     with "Int. exptl" (experimental) taken from exp.dat but not all 
+  !     exp peaks are exported if no theoretical counterpart exists
+  !> -f filename or  -f <name_of_res_file>
+  !> -t couting ions with charge x to y (give the value, e.g. "-t 1 2" 
+  !     for charge 1 to 2)
+  !> -w broadening the charges by an SD 
+  !> -s Take only secondary and tertiary fragmentations (give the value, 
+  !      e.g. "-s 2" for secondary)
+  !  -m set minimum value for m/z, so 100% value will be calc. for higher values (CID)
+  !  -p calculate NO isotope pattern
+  !  -i set minimum intensity that is considered in rel. intensity percent 
   
   do i = 1, 9
      if(index(arg(i),'-a') /= 0)  cthr   = -1000.0_wp
@@ -171,13 +173,13 @@ program plotms
         mzmin=int(xx(1))
      endif
 
-     ! get initial charge of system
+     ! get initial charge of system <- not used anymore
      if(index(arg(i),'-c') /= 0)then
         call readl(arg(i+1),xx,nn)
         total_charge = real(xx(1),wp)
      endif
-
-     ! set the minimum intensity
+     ! set minimum intensity that is considered for the output 
+     ! default: >1%. For all (>0%): set = 0
      if(index(arg(i),'-i') /= 0)then
         call readl(arg(i+1),xx,nn)
         min_intensity = real(xx(1),wp)
@@ -245,7 +247,7 @@ program plotms
   write(*,'(6x,''*           P l o t M S           *'')')
   write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
   write(*,'(6x,''*    QCxMS spectra plotting tool  *'')')
-  write(*,'(6x,''*         -  v. 6.0.2  -          *'')')
+  write(*,'(6x,''*         -  v. 6.2.0  -          *'')')
   write(*,'(6x,''*          06. Dec 2021           *'')')
   write(*,'(6x,''*           *   *   *             *'')')
   write(*,'(6x,''*           S. Grimme             *'')')
@@ -323,12 +325,12 @@ program plotms
     !write(*,*) 'COUNTER', counter
 
     if (spec == 1) then    !EI
-      read(io_spec,*,iostat=io) chrg2, irun, jsec, nf, atm_types, (iat(kk),nat(kk), kk = 1, atm_types)
+      read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jsec, nf, atm_types, (iat(kk),nat(kk), kk = 1, atm_types)
       if(io<0) exit !EOF
       if(io>0) stop ' -- Fail in read -- ' !fail
   
     elseif(spec == 2) then !CID
-      read(io_spec,*,iostat=io) chrg2, irun, jcoll, jsec, nf, atm_types, (iat(kk), nat(kk), kk = 1, atm_types)
+      read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jcoll, jsec, nf, atm_types, (iat(kk), nat(kk), kk = 1, atm_types)
       if(io<0) exit !EOF
       if(io>0) stop ' -- Fail in read -- ' !fail
 
@@ -339,11 +341,26 @@ program plotms
 
 
     if (isec > 0 .and. isec /= jsec) cycle !check tertiary,etc fragmentation (isec)
-  
-    if (chrg2 > cthr) then  !default: chrg2 > 0.001
-      ntot = sum(nat(1:atm_types))
-      if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
+ 
+    if ( z_chrg > 0 ) then
+      if (chrg2 > cthr) then  !default: chrg2 > 0.001
+        ntot = sum(nat(1:atm_types))
+        if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
+        if ( z_chrg > int(total_charge) ) total_charge = real( z_chrg, wp )
+      endif
+    elseif ( z_chrg < 0 ) then
+      if (chrg2 < -1.0_wp*cthr) then  !default: chrg2 > 0.001
+        ntot = sum(nat(1:atm_types))
+        if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
+        if ( z_chrg < int(total_charge) ) total_charge = real( z_chrg, wp )
+      endif
     endif
+
+
+    !if (chrg2 > cthr) then  !default: chrg2 > 0.001
+    !  ntot = sum(nat(1:atm_types))
+    !  if ( ntot > maxatm ) maxatm = ntot  !get highest number of atoms in fragment
+    !endif
 
     i = i + 1 !count number of single fragments with charge > chrt
     if ( irun > maxrun ) maxrun = irun !save highest run number
@@ -406,12 +423,12 @@ program plotms
 
     !> read the fragment entry from qcxms.res line by line
     if (spec == 1) then    !EI
-       read(io_spec,*,iostat=io) chrg2,  irun, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
+       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
        if(io<0) exit !EOF
        if(io>0) stop !fail
   
     elseif(spec == 2) then !CID
-       read(io_spec,*,iostat=io) chrg2, irun, jcoll, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
+       read(io_spec,*,iostat=io) chrg2, z_chrg, irun, jcoll, jsec, nf, atm_types, (iat(kk),nat(kk),kk=1,atm_types)
        if(io<0) exit !EOF
        if(io>0) stop !fail
 
@@ -428,10 +445,18 @@ program plotms
     if ( cthr < 0 ) chrg = total_charge
 
     !> count the moment where fragments were created (first/second MD or collision...)
+    !if ( (z_chrg > 0 .and. chrg > cthr) .or. (z_chrg < 0 .and. chrg < -1* cthr) ) then   ! default: yes
     if ( abs(chrg) > cthr )  then   ! default: yes
       sel = .true.
       ial = ial + 1              !count total amount of fragmentations
       jal(jsec) = jal(jsec) + 1  !count amount of first, sec., tert., ... fragmentations
+
+      !> if not fragmented (i.e. smaller/larger than total_charge) count it to kal(1)
+      !if ( abs(chrg) < abs(total_charge) ) then
+      !  kal(jcoll) = kal(jcoll) + 1 !count the collisions
+      !else
+      !  kal(1) = kal(jcoll) + 1     !no fragmentation
+      !endif
 
 
       !> count the collision at which most framentation occured
@@ -467,7 +492,7 @@ program plotms
       !> compute isotope patterns via monte carlo and save intensites 
       !  of all possible combinations 
       call isotope (counter, mzmin, ntot, iat_save, maxatm, rnd, &
-        noIso, index_mass, exact_intensity, isotope_masses)
+        noIso, index_mass, exact_intensity, isotope_masses, z_chrg)
 
       !>> distribute charge (if set as input)
       if(chrg_wdth > 1.0d-6) chrg = vary_energies(chrg,chrg_wdth) 
@@ -786,6 +811,23 @@ rd: do
     kkk  = 0
     kkkk = 0
 
+    !> because NIST is in integer, convert to int.
+    !do j = 1, list_length
+    !  if ( nint(sorted_masses(j)) == stored(
+    !  store = nint(j)
+    !  if ( exp_mass(i) == nint(sorted_masses(j))) then
+    !        r = sorted_intensities(j) - (exp_int(i) / norm)
+    !        !write(*,*) i, exp_mass(i), exp_int(i)
+    !        !write(*,*) j, sorted_masses(j), sorted_intensities(j) 
+    !        !write(*,*) r
+    !        kkk = kkk + 1
+    !        if ( sorted_intensities(j) > 2.5_wp) kkkk = kkkk + 1
+    !        rms = rms + abs(r)
+    !      endif
+    !    endif
+    !  enddo il
+
+
 ol: do i = 1, exp_entries
 il:   do j = 1, list_length
         if ( exp_int(i)/norm > 5.0_wp )then !.and. sorted_intensities(j) > 1.0_wp )then
@@ -830,8 +872,8 @@ il:   do j = 1, list_length
     stop       ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
 
 
-    call match(sorted_masses, sorted_intensities, list_length, &
-                exp_entries, exp_mass, exp_int,score,tmax)
+  !  call match(sorted_masses, sorted_intensities, list_length, &
+  !              exp_entries, exp_mass, exp_int,score,tmax)
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
@@ -860,6 +902,7 @@ subroutine match(sorted_masses, sorted_intensities, list_length, &
   integer :: pp !peak pair number pp
   integer :: numcalc ! number of calculated peaks
   integer :: list_length, exp_entries
+  integer :: entry, entry2
 
   !real(wp) :: tmass(10000)
   !real(wp) :: iexp(2,10000)
@@ -880,6 +923,7 @@ subroutine match(sorted_masses, sorted_intensities, list_length, &
   !enddo
 
   numcalc = list_length
+  entry = 0
   
   !weighted spectral vectors, m**3, int**0.6 scaling
   w = 0.0_wp
@@ -892,71 +936,153 @@ subroutine match(sorted_masses, sorted_intensities, list_length, &
     !  enddo
     !enddo
   !do i = 1, 10000
-ol: do i = 1, exp_entries
-il:  do j = 1, list_length
-       if ( sorted_masses(j) == exp_mass(i) ) then
-        !w(2,j) = j**2 * ( 100.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
-        w(2,j) = j**2 * ( sorted_intensities(j) )**0.6_wp ! changed this to 1000 <- check it!
-        w(1,j) = exp_mass(i)**2 * exp_int(i)**0.6_wp
-      endif
-    enddo il
-  enddo ol
+!ol: do i = 1, exp_entries
+!il:  do j = 1, list_length
+!!       if ( int(sorted_masses(j)) == exp_mass(i) ) then
+!         entry = entry + 1
+!        !w(2,j) = j**2 * ( 100.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
+!        w(2,entry) = int(sorted_masses(j))**2 * ( sorted_intensities(j) )**0.6_wp ! changed this to 1000 <- check it!
+!        w(1,entry) = exp_mass(i)**2 * exp_int(i)**0.6_wp
+!      endif
+!    enddo il
+!  enddo ol
   
+  !norm = 0.0_wp
+  !do i = 1, 10000
+  !   norm(1) = norm(1) + w(1,i)**2
+  !   norm(2) = norm(2) + w(2,i)**2
+  !enddo
+  !do i = 1, 10000
+  !   w(1,i) = w(1,i) / norm(1)
+  !   w(2,i) = w(2,i) / norm(2)
+  !enddo
+
   norm = 0.0_wp
-  do i = 1, 10000
-     norm(1) = norm(1) + w(1,i)**2
-     norm(2) = norm(2) + w(2,i)**2
-  enddo
-  
-  norm = sqrt(norm)
-  
-  do i = 1, 10000
+  do i = 1, exp_entries
+    w(1,i) = exp_mass(i)**2 * exp_int(i)**0.6_wp
+    norm(1) = norm(1) + w(1,i)**2
+  enddo 
+
+  norm(1) = sqrt(norm(1))
+
+  do i = 1, exp_entries
      w(1,i) = w(1,i) / norm(1)
-     w(2,i) = w(2,i) / norm(2)
   enddo
+
+  do j = 1, list_length
+    w(2,j) = (sorted_masses(j))**2 * ( sorted_intensities(j) )**0.6_wp 
+    norm(2) = norm(2) + w(2,j)**2
+  enddo 
+
+  norm(2) = sqrt(norm(2))
+
+  do j = 1, list_length
+     w(2,j) = w(2,j) / norm(2)
+  enddo
+
+
+  !norm = 0.0_wp
+  !do i = 1, entry
+  !   norm(1) = norm(1) + w(1,i)**2
+  !   norm(2) = norm(2) + w(2,i)**2
+  !enddo
+  
+  !norm = sqrt(norm)
+  !
+  !do i = 1, entry
+  !   w(1,i) = w(1,i) / norm(1)
+  !   w(2,i) = w(2,i) / norm(2)
+  !enddo
   
   dot  =  0.0_wp
   sum1 =  0.0_wp
   sum2 =  0.0_wp
   sum3 =  0.0_wp
 
-  do i = 1, 10000
-     sum1 = sum1 + w(1,i) * w(2,i)
-     sum2 = sum2 + (w(1,i))**2
-     sum3 = sum3 + (w(2,i))**2
-  enddo
+  !do i = 1, 10000
+  !   sum1 = sum1 + w(1,i) * w(2,i)
+  !   sum2 = sum2 + (w(1,i))**2
+  !   sum3 = sum3 + (w(2,i))**2
+  !enddo
+
+ do i = 1, exp_entries
+   do j = 1, list_length
+        if ( exp_mass(i) == nint(sorted_masses(j))) then
+          sum1 = sum1 + w(1,i) * w(2,j)
+          sum2 = sum2 + (w(1,i))**2
+          sum3 = sum3 + (w(2,j))**2
+        endif
+      enddo 
+    enddo 
+
   
   dot = sum1**2 / (sum2 * sum3)
+  write(*,*) 'DOT', dot
   
   ! masses and intensity scalement for the second term
   ! m**0
   ! int**1
   
-  w=0.0_wp
+  !w=0.0_wp
+  !entry2 = 0
 
-  do i = 1, 10000
-     !do j = 1, 10000
-     do j = 1, list_length
-        if ( j == exp_mass(i) ) then
-           w(2,j) = sorted_intensities(j) 
-           w(1,j) = exp_int(i)
-        endif
-     enddo
-  enddo
+  !do i = 1, exp_entries
+  !  w(1,entry2) = exp_int(i)
+  !enddo
+
+  !do i = 1, exp_entries
+  !   do j = 1, list_length
+  !      if ( int(sorted_masses(j)) == exp_mass(i) ) then
+  !        entry2 = entry2 + 1
+  !         w(2,entry2) = sorted_intensities(j) !100.0_wp * tmass(j) / tmax
+  !         w(1,entry2) = exp_int(i)
+  !      endif
+  !   enddo
+  !enddo
+
+  !!do i = 1, 10000
+  !   !do j = 1, 10000
+  !do i = 1, exp_entries
+  !   do j = 1, list_length
+  !      if ( int(sorted_masses(j)) == exp_mass(i) ) then
+  !        entry2 = entry2 + 1
+  !         w(2,entry2) = sorted_intensities(j) !100.0_wp * tmass(j) / tmax
+  !         w(1,entry2) = exp_int(i)
+  !      endif
+  !   enddo
+  !enddo
   
   !calculate the norm
   
+  !norm=0.0_wp
+  !do i=1, 10000
+  !   norm(1) = norm(1) + w(1,i)**2
+  !   norm(2) = norm(2) + w(2,i)**2
+  !enddo
+  !
+  !norm = sqrt(norm)
+  !
+  !do i = 1, 10000
+  !   w(1,i) = w(1,i) / norm(1)
+  !   w(2,i) = w(2,i) / norm(2)
+  !enddo
+
   norm=0.0_wp
-  do i=1, 10000
-     norm(1) = norm(1) + w(1,i)**2
-     norm(2) = norm(2) + w(2,i)**2
+  do i=1, exp_entries
+     norm(1) = norm(1) + exp_int(i) !w(1,i)**2
   enddo
+  norm(1) = sqrt(norm(1))
+
+  do j=1, list_length
+     norm(2) = norm(2) + sorted_intensities(j) !w(2,i)**2
+  enddo
+  norm(2) = sqrt(norm(2))
   
-  norm = sqrt(norm)
-  
-  do i = 1, 10000
+  do i=1, exp_entries
      w(1,i) = w(1,i) / norm(1)
-     w(2,i) = w(2,i) / norm(2)
+  enddo
+  do j=1, list_length
+     w(2,j) = w(2,j) / norm(2)
   enddo
   
   pp   = 0
@@ -964,18 +1090,40 @@ il:  do j = 1, list_length
   fr   = 0.0_wp
   p    = 0.0_wp
 
-  do i = 1, 10000
-     if ( (w(1,i) * w(2,i) ) /= 0) then
-        pp = pp + 1
-        p(1,pp) = w(1,i)
-        p(2,pp) = w(2,i)
-  !         print*,p(1,i),p(2,i)
-     endif
-  enddo
+  !do i = 1, 10000
+  !do i = 1, entry2
+  !  if ( (w(1,i) * w(2,i) ) /= 0) then
+  !    pp = pp + 1
+  !    p(1,pp) = w(1,i)
+  !    p(2,pp) = w(2,i)
+  !  endif
+  !enddo
+
+! do i = 1, exp_entries
+!   do j = 1, list_length
+!        if ( (w(1,i) * w(2,j) ) /= 0) then
+!          pp = pp + 1
+!          p(1,pp) = w(1,i)
+!          p(2,pp) = w(2,i)
+!        endif
+!      enddo
+!    enddo
+  do i = 1, exp_entries
+    do j = 1, list_length
+      if ( exp_mass(i) == nint(sorted_masses(j))) then
+           pp = pp + 1
+           p(1,pp) = w(1,i)
+           p(2,pp) = w(2,i)
+      endif
+    enddo 
+  enddo 
   
   ! ardous loop 
-  call calcfr(pp,p,sum4)
+!  call calcfr(pp,p,sum4)
+  call calcfr(pp,w,sum4)
   if (pp == numcalc) sum4 = sum4 + 1.0_wp
+  write(*,*) 'SUM4', sum4
+  write(*,*) 'numcalc', numcalc
   
   fr = sum4 / float(pp)
   score = (numcalc * dot + pp * fr) / (numcalc + pp)
