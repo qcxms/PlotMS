@@ -19,6 +19,8 @@ srcs = ['main.f90',
        'readcommon.f90',
        'readl.f90',
        'xtb_mctc_accuracy.f90',
+       'xtb_mctc_constants.f90',
+       'xtb_mctc_convert.f90',
        'xtb_mctc_symbols.f90',
        'xtb_mctc_resize.f90'
        ]
