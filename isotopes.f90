@@ -16,7 +16,7 @@ module isotope_pattern
   contains
 
 subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
-    no_isotopes, index_mass, exact_intensity, isotope_masses)
+    no_isotopes, index_mass, exact_intensity, isotope_masses, z_chrg)
 
   integer :: ntot,iat_save(*),maxatm
   integer :: niso(200)
@@ -27,6 +27,7 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
 !  integer :: tmp_intensity
   integer :: store_int(1000)
   integer :: mzmin
+  integer :: z_chrg
 
   real(wp) :: rnd(nrnd,maxatm)
   real(wp) :: r,sum_prob
@@ -34,7 +35,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   real(wp) :: list_masses(nrnd)
   real(wp),allocatable :: isotope_masses(:)
 
-  real(wp) :: save_mass(nrnd)
   real(wp) :: current_mass
 
   real(wp), allocatable :: exact_intensity(:)
@@ -407,7 +407,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   ! postprocessing starts here 
   
   prob = prob * 0.01_wp
-  save_mass = 0.0_wp
   list_masses = 0.0_wp
   index_mass = 0
   loop = 0
@@ -456,7 +455,8 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
       enddo
       xmass = xmass + x
     enddo
-      current_mass = xmass !/ real(abs(z_chrg),wp)
+
+      current_mass = xmass / real(abs(z_chrg),wp)
 
       there = .true.
       if ( current_mass > mzmin ) then 
@@ -512,7 +512,7 @@ noiso:  do
          xmass = xmass + x
       enddo
 
-      current_mass = xmass !/ float(abs(z_chrg))
+      current_mass = xmass / float(abs(z_chrg))
 
       there = .true.
       !> only values larger than user input 
