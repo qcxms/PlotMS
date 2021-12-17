@@ -4,8 +4,7 @@
 
 **Installation**
 
-Put the `plotms` [executable](https://github.com/qcxms/PlotMS/releases) into your `$HOME/bin/` folder. 
-Put the *.mass_raw.agr* file into your *$HOME* folder. 
+Put the `plotms` [executable](https://github.com/qcxms/PlotMS/releases) and the `.mass_raw.agr` files into the `$HOME/bin/` folder. 
 
 **Compiling**
 
@@ -22,7 +21,7 @@ Copy the binary from the *build/plotms* file into a directory in your path, e.g.
 
 **Running the script**
 
-The files *qcxms.res* and *qcxms_cid.res* are produced then QCxMS is finished with the last run. Run `plotms` in your working directory. 
+The files `qcxms.res` and `qcxms_cid.res` are produced then QCxMS is finished with the last run. Run `plotms` in your working directory. 
 From version 6.0 and higher, **exact masses** are produced.
 
 The following files are produced:
@@ -31,8 +30,7 @@ The following files are produced:
 3) *result.csv* - output in the CSV format. 
 the *m/z* and the abundances values can be found. 
 
-
-For the older QCEIMS program, use plotms version 4.2
+For the older QCEIMS program, use plotms version 4.2. Calculations done with QCEIMS can still be used with newer versions by renaming the `qceims.res` to `qcxms.res` or `qceims_cid.res` to `qcxms_cid.res` .  
 
 **Documentation**
 
