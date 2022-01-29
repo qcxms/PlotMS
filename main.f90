@@ -88,7 +88,7 @@ program plotms
   character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
-  character(len=4096) :: fullpath
+  character(len=4096), external :: fullpath
 
   verbose          = .false.
   small         = .false.
