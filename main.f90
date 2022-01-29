@@ -1017,10 +1017,10 @@ function fullpath(fname)
     fullpath = fname
   else if(fname(1:2) .eq. '~/') then
     call getenv('HOME', absdir)
-    fullpath = absdir(:lnblnk(absdir)) // fname(2:lnblnk(fname))
+    fullpath = absdir(:len_trim(absdir)) // fname(2:len_trim(fname))
   else
     call getcwd(absdir)
-    fullpath = absdir(:lnblnk(absdir)) // '/' // fname(:lnblnk(fname))
+    fullpath = absdir(:len_trim(absdir)) // '/' // fname(:len_trim(fname))
   endif
   return
 end function fullpath
