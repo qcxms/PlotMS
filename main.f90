@@ -1011,7 +1011,7 @@ end subroutine calcfr
 ! Note, this function replaces shell tilde ~/ with the explicit home dir string.
 function fullpath(fname)
   implicit none
-  character fname*(*)
+  character(len=*), intent(in) :: fname
   character(len=4096) :: absdir, fullpath
   if(fname(1:1) .eq. '/') then
     fullpath = fname
