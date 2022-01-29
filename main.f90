@@ -1022,6 +1022,5 @@ function fullpath(fname)
     call getcwd(absdir)
     fullpath = absdir(:len_trim(absdir)) // '/' // fname(:len_trim(fname))
   endif
-  return
 end function fullpath
 
