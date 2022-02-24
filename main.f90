@@ -242,7 +242,7 @@ program plotms
   write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
   write(*,'(6x,''*    QCxMS spectra plotting tool  *'')')
   write(*,'(6x,''*         -  v. 6.2.0  -          *'')')
-  write(*,'(6x,''*          06. Dec 2021           *'')')
+  write(*,'(6x,''*          10. Jan 2022           *'')')
   write(*,'(6x,''*           *   *   *             *'')')
   write(*,'(6x,''*           S. Grimme             *'')')
   write(*,'(6x,''*           J. Koopman            *'')')

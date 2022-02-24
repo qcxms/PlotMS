@@ -119,6 +119,19 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
         prob(17,2)        = 24.24_wp
         massiso(17,1)     = 34.968852_wp
         massiso(17,2)     = 36.965902_wp
+
+   ! 20 Ca (Calcium)
+        niso(20)          = 5
+        prob(20,1)        = 96.94_wp
+        prob(20,2)        = 0.65_wp
+        prob(20,3)        = 0.14_wp
+        prob(20,4)        = 2.09_wp
+        prob(20,5)        = 0.18_wp
+        massiso(20,1)     = 39.962591_wp
+        massiso(20,2)     = 41.958618_wp
+        massiso(20,3)     = 42.958766_wp
+        massiso(20,4)     = 43.955482_wp
+        massiso(20,5)     = 45.953688_wp      
   
    ! 22 Ti (Titanium) 
         niso(22)          = 5           
@@ -336,6 +349,13 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
           niso(53)        = 1          
           prob(53,1)      = 100.00_wp
           massiso(53,1)   = 126.904473_wp
+
+   ! 57 La (Lanthanum)
+          niso(57)        = 2          
+          prob(57,1)      = 0.09_wp
+          prob(57,2)      = 99.91_wp
+          massiso(57,1)   = 137.907112_wp
+          massiso(57,2)   = 138.909477_wp
 
    ! 74 W (Tungsten)
           niso(74)        = 5          
