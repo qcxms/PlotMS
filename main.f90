@@ -35,6 +35,7 @@
 program plotms
   use count_entries, only: check_entries
   use isotope_pattern, only: isotope
+  use version, only: print_version 
   use qcxms_boxmuller, only: vary_energies
   use qcxms_readcommon
   use xtb_mctc_accuracy, only: wp
@@ -91,7 +92,26 @@ program plotms
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
   character(len=4096), external :: fullpath
 
-  verbose          = .false.
+  !!!!!!!!!!!!!!!!!!!!!
+  integer :: store_length
+  integer :: int_store
+  integer :: sm
+  integer :: int_ms(1000)
+  integer :: integer_mass(1000)
+  integer :: store_check_list
+  integer :: new_length
+  integer :: store_mass(1000)
+  real(wp) :: store_intensities
+  real(wp) :: store_check(1000)
+  real(wp), allocatable :: added_intensities(:)
+  real(wp), allocatable :: added_masses(:)
+  real(wp) :: store_int(1000)
+  !real(wp) :: store_check_list
+  !integer, allocatable :: added_masses(:)
+  !integer, allocatable :: exp_mass (:)
+  !!!!!!!!!!!!!!!!!!!!!
+
+  verbose       = .false.
   small         = .false.
   isec          = 0
   norm          = 1.0
@@ -241,20 +261,8 @@ program plotms
   spec = 1 ! EI
   endif
 
+  call print_version
   
-  write(*,*)
-  write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
-  write(*,'(6x,''*           P l o t M S           *'')')
-  write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
-  write(*,'(6x,''*    QCxMS spectra plotting tool  *'')')
-  write(*,'(6x,''*         -  v. 6.2.0  -          *'')')
-  write(*,'(6x,''*          10. Jan 2022           *'')')
-  write(*,'(6x,''*           *   *   *             *'')')
-  write(*,'(6x,''*           S. Grimme             *'')')
-  write(*,'(6x,''*           J. Koopman            *'')')
-  write(*,'(6x,''* * * * * * * * * * * * * * * * * *'')')
-  write(*,'(6x,''   Contributor:  C.Bauer, T.Kind   '')')
-  write(*,*)
   write(*,'(6x,''   -> Reading file: '',(a)         )')trim(fname)
   if (verbose) write(*,'(6x ''   -> xmgrace file body '',(a)         )')trim(xname)
   write(*,*)
@@ -827,17 +835,68 @@ rd: do
     !    endif
     !  enddo il
 
+    ! bring exp to the right order of magnitude 
+    do i = 1, exp_entries
+      exp_int(i) = exp_int(i) / norm
+    enddo
+
+    !> calculate integer list of theor. masses
+    store_int = 0
+
+    do j = 1, list_length 
+      int_ms(j) = nint(sorted_masses(j))
+    enddo
+
+    new_length = 0
+    sm = 0
+
+    do i = 1, list_length 
+      store_intensities = 0.0_wp
+
+      store_check_list = int_ms(i)
+
+      if(sm /= store_check_list) new_length = new_length + 1
+
+      do j = 1, list_length
+        if (store_check_list == int_ms(j))then
+          store_intensities = store_intensities + sorted_intensities(j)
+        endif
+
+      enddo
+
+      sm = store_check_list
+
+      store_int(new_length) = store_intensities
+      store_mass(new_length) = store_check_list
+
+      !write(*,*) store_check_list, new_length, added_intensities(new_length)
+        
+    enddo
+
+    allocate(added_intensities(new_length), &
+             added_masses(new_length))
+
+    do i = 1, new_length
+      added_masses(i)      = store_mass(i)
+      added_intensities(i) = (store_int(i)/maxval(store_int)*100.0_wp)
+      write(*,*) added_masses(i), added_intensities(i)
+    enddo
+      write(*,*) 
+    do i = 1, exp_entries
+      write(*,*) exp_mass(i), exp_int(i)
+    enddo
+      write(*,*) 
+      write(*,*) 
+
 
 ol: do i = 1, exp_entries
-il:   do j = 1, list_length
-        if ( exp_int(i)/norm > 5.0_wp )then !.and. sorted_intensities(j) > 1.0_wp )then
-          if ( exp_mass(i) == nint(sorted_masses(j))) then
-            r = sorted_intensities(j) - (exp_int(i) / norm)
-            !write(*,*) i, exp_mass(i), exp_int(i)
-            !write(*,*) j, sorted_masses(j), sorted_intensities(j) 
-            !write(*,*) r
+il:   do j = 1, new_length
+        if ( exp_int(i) > 5.0_wp )then 
+          !if ( nint(exp_mass(i)) == added_masses(j) ) then
+          if ( exp_mass(i) == added_masses(j) ) then
+            r = added_intensities(j) - exp_int(i)
             kkk = kkk + 1
-            if ( sorted_intensities(j) > 2.5_wp) kkkk = kkkk + 1
+            if ( added_intensities(j) > 2.5_wp) kkkk = kkkk + 1
             rms = rms + abs(r)
           endif
         endif
@@ -849,7 +908,6 @@ il:   do j = 1, list_length
     write(*,*)'# exptl. > 5 %     = ', kkk
     write(*,*)'% correctly found  = ', 100 * float(kkkk)/float(kkk)
 
-  endif
   
   close(io_spec)
   close(io_raw)
@@ -858,22 +916,20 @@ il:   do j = 1, list_length
   close(io_jcamp)
   
   ! compute mass spectral match score
-  if(exdat)then 
     score = 0.0_wp
-    ! bring exp to the right order of magnitude 
-    do i = 1, exp_entries
-      exp_int(i) = exp_int(i) / norm
-    enddo
 
-    write(*,*) 
-    write(*,*) ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
-    write(*,*) ' - NIST mass comparison not supported in v6.0 - '
-    write(*,*) '   -    no automatic score comparison       -'
-    stop       ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
+    !write(*,*) 
+    !write(*,*) ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
+    !write(*,*) ' - NIST mass comparison not supported in v6.0 - '
+    !write(*,*) '   -    no automatic score comparison       -'
+    !write(*,*) ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
+    !stop       ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! '
 
 
-  !  call match(sorted_masses, sorted_intensities, list_length, &
-  !              exp_entries, exp_mass, exp_int,score,tmax)
+    !call match_accurate(sorted_masses, sorted_intensities, list_length, &
+    !            exp_entries, exp_mass, exp_int,score,tmax)
+    call match(added_masses, added_intensities, new_length, &
+                exp_entries, exp_mass, exp_int,score,tmax)
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
@@ -882,8 +938,8 @@ il:   do j = 1, list_length
     write(*,*)
     write(*,*)"Composite match score, see "
     write(*,*)"Stein, S. E.; Scott, D. R. J. Am. Soc. Mass Spectrom. 1994, 5, 859-866" 
-    write(*,*)"For our implementation, see "
-    write(*,*)"Bauer, C. A.; Grimme,S. J. Phys. Chem. A 2014, 118, 11479-11484"
+    !write(*,*)"For our implementation, see "
+    !write(*,*)"Bauer, C. A.; Grimme,S. J. Phys. Chem. A 2014, 118, 11479-11484"
     
   
   endif 
@@ -893,7 +949,7 @@ end program plotms
  
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-subroutine match(sorted_masses, sorted_intensities, list_length, &
+subroutine match(added_masses, added_intensities, new_length, &
                   exp_entries,  exp_mass, exp_int,score,tmax)
   use xtb_mctc_accuracy, only: wp
   implicit none
@@ -901,8 +957,9 @@ subroutine match(sorted_masses, sorted_intensities, list_length, &
   integer :: i,j
   integer :: pp !peak pair number pp
   integer :: numcalc ! number of calculated peaks
-  integer :: list_length, exp_entries
-  integer :: entry, entry2
+  integer :: new_length, exp_entries
+!  integer :: entry, entry2
+  integer :: cnt
 
   !real(wp) :: tmass(10000)
   !real(wp) :: iexp(2,10000)
@@ -910,107 +967,76 @@ subroutine match(sorted_masses, sorted_intensities, list_length, &
   real(wp) :: exp_int(exp_entries)
   real(wp) :: score
   real(wp) :: tmax
-  real(wp) :: w(2,10000) !weighted vectors
+  real(wp),allocatable :: w_exp(:) !weighted vectors
+  real(wp),allocatable :: w_thr(:) !weighted vectors
+  !real(wp) :: w(2,10000) !weighted vectors
+  !real(wp), allocatable :: w_exp(:) !weighted vectors
+  !real(wp), allocatable :: w_thr(:) !weighted vectors
   real(wp) :: sum1,sum2,sum3,sum4,dot,fr
-  real(wp) :: norm(2)
-  real(wp) :: p(2,10000) ! peak pair matrix 
-  real(wp) :: sorted_masses(list_length), sorted_intensities(list_length)
+  !real(wp) :: norm(2)
+  real(wp) :: norm
+  !real(wp) :: p(2,10000) ! peak pair matrix 
+  real(wp), allocatable :: p(:,:) ! peak pair matrix 
+  real(wp) :: added_masses(new_length)
+  real(wp) :: added_intensities(new_length)
+  !!!!!!!!!!!!!!!
+  !integer :: exp_mass(exp_entries)
+  !integer :: added_masses(new_length)
+  !!!!!!!!!!!!!!!
 
-  numcalc=0
-  
-  !do i = 1, 10000
-  !  if ( tmass(i) /= 0.0_wp ) numcalc = numcalc + 1
-  !enddo
 
-  numcalc = list_length
-  entry = 0
+!  numcalc = new_length
+!  entry = 0
   
-  !weighted spectral vectors, m**3, int**0.6 scaling
-  w = 0.0_wp
-    !do i = 1, 10000
-    !  do j = 1, 10000
-    !    if ( j == iexp(1, i) ) then
-    !      w(2,j) = j**2 * ( 1000.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
-    !      w(1,j) = iexp(1,i)**2 * iexp(2,i)**0.6_wp
-    !    endif
-    !  enddo
-    !enddo
-  !do i = 1, 10000
-!ol: do i = 1, exp_entries
-!il:  do j = 1, list_length
-!!       if ( int(sorted_masses(j)) == exp_mass(i) ) then
-!         entry = entry + 1
-!        !w(2,j) = j**2 * ( 100.0_wp * tmass(j) / tmax )**0.6_wp ! changed this to 1000 <- check it!
-!        w(2,entry) = int(sorted_masses(j))**2 * ( sorted_intensities(j) )**0.6_wp ! changed this to 1000 <- check it!
-!        w(1,entry) = exp_mass(i)**2 * exp_int(i)**0.6_wp
-!      endif
-!    enddo il
-!  enddo ol
+  !allocate( w_exp(exp_entries), &
+  !          w_thr(new_length))
   
-  !norm = 0.0_wp
-  !do i = 1, 10000
-  !   norm(1) = norm(1) + w(1,i)**2
-  !   norm(2) = norm(2) + w(2,i)**2
-  !enddo
-  !do i = 1, 10000
-  !   w(1,i) = w(1,i) / norm(1)
-  !   w(2,i) = w(2,i) / norm(2)
-  !enddo
+  !> weighted spectral vectors, m**3, int**0.6 scaling
+  !w = 0.0_wp
 
+  pp = 0
+  !> get weighting of experimental spectrum
+  allocate(w_exp(exp_entries))
   norm = 0.0_wp
   do i = 1, exp_entries
-    w(1,i) = exp_mass(i)**2 * exp_int(i)**0.6_wp
-    norm(1) = norm(1) + w(1,i)**2
+    w_exp(i) = exp_mass(i)**2 * exp_int(i)**0.6_wp
+    norm = norm + w_exp(i)**2
   enddo 
 
-  norm(1) = sqrt(norm(1))
+  norm = sqrt(norm)
 
   do i = 1, exp_entries
-     w(1,i) = w(1,i) / norm(1)
+     w_exp(i) = w_exp(i) / norm
   enddo
 
-  do j = 1, list_length
-    w(2,j) = (sorted_masses(j))**2 * ( sorted_intensities(j) )**0.6_wp 
-    norm(2) = norm(2) + w(2,j)**2
+  !> get weighting of calculated spectrum
+  allocate(w_thr(new_length))
+  norm = 0.0_wp
+  do j = 1, new_length
+    w_thr(j) = (added_masses(j))**2 * ( added_intensities(j) )**0.6_wp 
+    norm = norm + w_thr(j)**2
   enddo 
 
-  norm(2) = sqrt(norm(2))
+  norm = sqrt(norm)
 
-  do j = 1, list_length
-     w(2,j) = w(2,j) / norm(2)
+  do j = 1, new_length
+     w_thr(j) = w_thr(j) / norm
   enddo
 
-
-  !norm = 0.0_wp
-  !do i = 1, entry
-  !   norm(1) = norm(1) + w(1,i)**2
-  !   norm(2) = norm(2) + w(2,i)**2
-  !enddo
-  
-  !norm = sqrt(norm)
-  !
-  !do i = 1, entry
-  !   w(1,i) = w(1,i) / norm(1)
-  !   w(2,i) = w(2,i) / norm(2)
-  !enddo
   
   dot  =  0.0_wp
   sum1 =  0.0_wp
   sum2 =  0.0_wp
   sum3 =  0.0_wp
 
-  !do i = 1, 10000
-  !   sum1 = sum1 + w(1,i) * w(2,i)
-  !   sum2 = sum2 + (w(1,i))**2
-  !   sum3 = sum3 + (w(2,i))**2
-  !enddo
 
  do i = 1, exp_entries
-   do j = 1, list_length
-        if ( exp_mass(i) == nint(sorted_masses(j))) then
-          sum1 = sum1 + w(1,i) * w(2,j)
-          sum2 = sum2 + (w(1,i))**2
-          sum3 = sum3 + (w(2,j))**2
+   do j = 1, new_length
+        if ( exp_mass(i) == added_masses(j)) then
+          pp = pp + 1
+          sum1 = sum1 +  w_exp(i) * w_thr(j)
+          sum2 = sum2 + (w_exp(i))**2
+          sum3 = sum3 + (w_thr(j))**2
         endif
       enddo 
     enddo 
@@ -1019,114 +1045,72 @@ subroutine match(sorted_masses, sorted_intensities, list_length, &
   dot = sum1**2 / (sum2 * sum3)
   write(*,*) 'DOT', dot
   
+  deallocate(w_exp, w_thr)
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! masses and intensity scalement for the second term
   ! m**0
   ! int**1
-  
-  !w=0.0_wp
-  !entry2 = 0
-
-  !do i = 1, exp_entries
-  !  w(1,entry2) = exp_int(i)
-  !enddo
-
-  !do i = 1, exp_entries
-  !   do j = 1, list_length
-  !      if ( int(sorted_masses(j)) == exp_mass(i) ) then
-  !        entry2 = entry2 + 1
-  !         w(2,entry2) = sorted_intensities(j) !100.0_wp * tmass(j) / tmax
-  !         w(1,entry2) = exp_int(i)
-  !      endif
-  !   enddo
-  !enddo
-
-  !!do i = 1, 10000
-  !   !do j = 1, 10000
-  !do i = 1, exp_entries
-  !   do j = 1, list_length
-  !      if ( int(sorted_masses(j)) == exp_mass(i) ) then
-  !        entry2 = entry2 + 1
-  !         w(2,entry2) = sorted_intensities(j) !100.0_wp * tmass(j) / tmax
-  !         w(1,entry2) = exp_int(i)
-  !      endif
-  !   enddo
-  !enddo
-  
-  !calculate the norm
-  
-  !norm=0.0_wp
-  !do i=1, 10000
-  !   norm(1) = norm(1) + w(1,i)**2
-  !   norm(2) = norm(2) + w(2,i)**2
-  !enddo
-  !
-  !norm = sqrt(norm)
-  !
-  !do i = 1, 10000
-  !   w(1,i) = w(1,i) / norm(1)
-  !   w(2,i) = w(2,i) / norm(2)
-  !enddo
+  allocate(w_exp(exp_entries), w_thr(new_length))
 
   norm=0.0_wp
-  do i=1, exp_entries
-     norm(1) = norm(1) + exp_int(i) !w(1,i)**2
-  enddo
-  norm(1) = sqrt(norm(1))
 
-  do j=1, list_length
-     norm(2) = norm(2) + sorted_intensities(j) !w(2,i)**2
-  enddo
-  norm(2) = sqrt(norm(2))
-  
   do i=1, exp_entries
-     w(1,i) = w(1,i) / norm(1)
+     !norm = norm + w_exp(i)**2 ! + exp_int(i) !w(1,i)**2
+     norm = norm + exp_int(i)**2 !w(1,i)**2
   enddo
-  do j=1, list_length
-     w(2,j) = w(2,j) / norm(2)
+
+  norm = sqrt(norm)
+
+  do i=1, exp_entries
+     w_exp(i) = exp_int(i) / norm
+  enddo
+
+  !!!!!!!!!!!!!!!!!!!!
+  norm=0.0_wp
+  do j=1, new_length
+     norm = norm + added_intensities(j)**2 !w(2,i)**2
+  enddo
+
+  norm = sqrt(norm)
+  
+  do j=1, new_length
+     w_thr(j) = added_intensities(j) / norm
   enddo
   
-  pp   = 0
+  !pp   = 0
+  !p    = 0.0_wp
   sum4 = 0.0_wp
   fr   = 0.0_wp
-  p    = 0.0_wp
+  cnt = 0
 
-  !do i = 1, 10000
-  !do i = 1, entry2
-  !  if ( (w(1,i) * w(2,i) ) /= 0) then
-  !    pp = pp + 1
-  !    p(1,pp) = w(1,i)
-  !    p(2,pp) = w(2,i)
-  !  endif
-  !enddo
+  write(*,*) ' PP ', pp
+  allocate (p(2,pp))
 
-! do i = 1, exp_entries
-!   do j = 1, list_length
-!        if ( (w(1,i) * w(2,j) ) /= 0) then
-!          pp = pp + 1
-!          p(1,pp) = w(1,i)
-!          p(2,pp) = w(2,i)
-!        endif
-!      enddo
-!    enddo
   do i = 1, exp_entries
-    do j = 1, list_length
-      if ( exp_mass(i) == nint(sorted_masses(j))) then
-           pp = pp + 1
-           p(1,pp) = w(1,i)
-           p(2,pp) = w(2,i)
+    do j = 1, new_length
+      if ( exp_mass(i) == added_masses(j)) then
+        cnt = cnt + 1
+        p(1,cnt) = w_exp(i)
+        p(2,cnt) = w_thr(j)
+        !write(*,*) cnt
+        !write(*,*) ' P1 ', p(1,cnt)
+        !write(*,*) ' P2 ', p(2,cnt)
+        !write(*,*) 
       endif
     enddo 
   enddo 
   
   ! ardous loop 
-!  call calcfr(pp,p,sum4)
-  call calcfr(pp,w,sum4)
-  if (pp == numcalc) sum4 = sum4 + 1.0_wp
-  write(*,*) 'SUM4', sum4
-  write(*,*) 'numcalc', numcalc
+  call calcfr(pp,p,sum4)
+!  call calcfr(pp,w,sum4)
+  if (pp == new_length) sum4 = sum4 + 1.0_wp
+  !write(*,*) 'SUM4', sum4
+  !write(*,*) 'numcalc', numcalc
+  !write(*,*) 'numcalc', new_length
   
   fr = sum4 / float(pp)
-  score = (numcalc * dot + pp * fr) / (numcalc + pp)
+  score = (new_length * dot + pp * fr) / (new_length + pp)
   return
 end subroutine match
 
