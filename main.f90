@@ -88,6 +88,7 @@ program plotms
   character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
+  character(len=4096), external :: fullpath
 
   verbose          = .false.
   small         = .false.
@@ -695,6 +696,7 @@ rd: do
   !> print out XMGRACE file
 
   !> when the template exists
+  xname = trim(fullpath(xname))
   inquire(file=xname, exist=ex)
   if(ex)then
     open(file=xname, newunit=io_raw)
@@ -1003,3 +1005,22 @@ subroutine calcfr(pp,pair,sum4)
   enddo
   
 end subroutine calcfr
+
+
+! Get the absolute path to file
+! Note, this function replaces shell tilde ~/ with the explicit home dir string.
+function fullpath(fname)
+  implicit none
+  character(len=*), intent(in) :: fname
+  character(len=4096) :: absdir, fullpath
+  if(fname(1:1) .eq. '/') then
+    fullpath = fname
+  else if(fname(1:2) .eq. '~/') then
+    call getenv('HOME', absdir)
+    fullpath = absdir(:len_trim(absdir)) // fname(2:len_trim(fname))
+  else
+    call getcwd(absdir)
+    fullpath = absdir(:len_trim(absdir)) // '/' // fname(:len_trim(fname))
+  endif
+end function fullpath
+

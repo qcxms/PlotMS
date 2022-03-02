@@ -55,6 +55,13 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
         massiso(1,1)      = 2.014101_wp
         massiso(1,2)      = 1.007825_wp
 
+   !  5 B  (Boron)
+        niso(5)           = 2
+        prob(5,1)         = 19.9_wp
+        prob(5,2)         = 80.1_wp
+        massiso(5,1)      = 10.0129370_wp
+        massiso(5,2)      = 11.0093055_wp
+
    !  6 C  (Carbon)
         niso(6)           = 2
         prob(6,1)         = 1.07_wp
