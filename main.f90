@@ -80,8 +80,10 @@ program plotms
   !real(wp), allocatable :: intensity(:)
   real(wp) :: list_masses(10000)
   real(wp) :: intensity(10000)
+  real(wp) :: mmax
 
-  logical  :: sel,verbose,exdat,small
+  logical  :: sel,verbose,small
+  logical  :: expdat, nistdat
   logical  :: ex,ex1,ex2,ex3,ex4
   logical  :: noIso, Plasma
   logical  :: args = .false.
@@ -92,19 +94,17 @@ program plotms
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
 
   !!!!!!!!!!!!!!!!!!!!!
-  integer :: store_length
-  integer :: int_store
+  integer :: save_line
   integer :: sm
-  integer :: int_ms(1000)
-  integer :: integer_mass(1000)
+  integer, allocatable :: int_ms(:)
   integer :: store_check_list
   integer :: new_length
   integer :: store_mass(1000)
   real(wp) :: store_intensities
-  real(wp) :: store_check(1000)
   real(wp), allocatable :: added_intensities(:)
   real(wp), allocatable :: added_masses(:)
   real(wp) :: store_int(1000)
+  !real(wp) :: store_ms(1000)
   !real(wp) :: store_check_list
   !integer, allocatable :: added_masses(:)
   !integer, allocatable :: exp_mass (:)
@@ -521,7 +521,8 @@ program plotms
   !> find the highest intensity
   tmax = maxval(intensity)
 
-  intensity(:) = intensity(:)/tmax * 1000.0_wp
+  !> normalize to 100%
+  intensity(:) = intensity(:)/tmax * 100.0_wp
 
   allocate(reduced_masses(count_mass), reduced_intensities(count_mass))
 
@@ -597,18 +598,18 @@ program plotms
   imax=0
   imin=0
   
-  inquire(file='exp.dat',exist=exdat)
+  inquire(file='exp.dat',exist=expdat)
+  inquire(file='nist.dat',exist=nistdat)
   
-  if(exdat) then
-    write(*,*) 'Reading exp.dat ...'
-    open( file = 'exp.dat', newunit = io_exp, status = 'old')
+  if(nistdat) then
+    write(*,*) 'Reading nist.dat ...'
+    open( file = 'nist.dat', newunit = io_exp, status = 'old')
   
-    !> read the experimental (NIST) file 
+    !> read the experimental (NIST/JCAMP) file 
 rd: do
       read(io_exp,'(a)',iostat=iocheck)line
       if (iocheck < 0) exit rd
 
-  
       !> read the maximum intensity of exp.
       if(index(line,'##MAXY=') /= 0)then
         line(7:7)=' '
@@ -645,22 +646,88 @@ rd: do
              kk = kk + 1
              exp_mass(kk) = xx(2 * k - 1)
              exp_int (kk) = xx(2 * k)
-             if(exp_mass(kk) > imax) imax = exp_mass(kk)
-             if(exp_int (kk) < imin) imin = exp_int (kk)
+             !if(exp_mass(kk) > imax) imax = exp_mass(kk)
+             !if(exp_int (kk) < imin) imin = exp_int (kk)
           enddo
         enddo
       endif
     enddo rd
-  
-    close(io_exp)
+
+    imax = maxval(exp_mass)
+    !imin = minval(exp_mass)
+
+    mmax = maxval(exp_int)
+
+    ! bring exp to the right order of magnitude 
+    do i = 1, exp_entries
+      exp_int(i) = exp_int(i) / norm
+    enddo
   endif
+
+  !!!!!!!!!!!!!!!!!!!!!
+  !> if it is a csv file
+  if (expdat) then
+    write(*,*) 'Reading exp.dat ...'
+    open( file = 'exp.dat', newunit = io_exp, status = 'old')
+
+    exp_entries = 0
+
+    !>> count the entries
+    do
+      read(io_exp,'(a)',iostat=iocheck)!line
+      if (iocheck < 0) exit 
+
+      exp_entries = exp_entries + 1
+    enddo
+
+    rewind(io_exp)
+
+    !>> allocate memory
+    allocate (exp_mass(exp_entries), &
+      &       exp_int(exp_entries))
+
+    kk = 0
+    save_line = 0
+    iocheck=0
+
+    !>> count the intensities and masses
+    do kk = 1, exp_entries
+      read(io_exp,'(a)',iostat=iocheck)line
+      if (iocheck < 0) exit 
+
+      do k=1,80
+        if(line(k:k) == ',') then
+          line(k:k)=' '
+          save_line = k
+        endif
+      enddo
+
+      call readl(line,xx,nn)
+
+      exp_mass(kk) = xx(1)
+      exp_int (kk) = xx(2)
+    enddo 
+    close(io_exp)
+
+    imax = maxval(exp_mass)
+    !imin = minval(exp_mass)
+
+    mmax = maxval(exp_int)
+
+    do kk = 1, exp_entries
+      exp_int (kk) = (exp_int(kk) / mmax) *100.0_wp
+    enddo
+
+  
+  endif
+
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  
   !> get the minimum m/z value that is to be plotted
   imin = mzmin
 
   !> get the maximum m/z value that is to be plotted
-  imax = nint(maxval(sorted_masses))
+  if (imax < nint(maxval(sorted_masses))) imax = nint(maxval(sorted_masses))
 
   ! counts of structures in the 100% peak
   write(*,*) 'Theoretical counts in 100 % signal:', idint(tmax)
@@ -780,22 +847,24 @@ rd: do
  
     !> Write out the results into the mass.agr file !
     do i = 1, list_length ! count_mass 
-      write(io_mass,*) sorted_masses(i), sorted_intensities(i)/10.0_wp 
+      write(io_mass,*) sorted_masses(i), sorted_intensities(i)
     enddo
 
     write(io_mass,*)'&'
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ! TK establish again if exdat (experimental JCAMPDX) exists
+    ! TK establish again if expdat (experimental JCAMPDX) exists
     ! TK exp_mass(i) - contains the exp masses and  exp_int(i) contains the abundance
     ! TK  exp_entries contains number of experimental spectra
   
-    if(exdat)then
+    if(nistdat .or. expdat)then
+
       write(io_mass,*)'@target G0.S2'
       write(io_mass,*)'@type bar'
       do i=1,exp_entries
-         write(io_mass,*) exp_mass(i),-exp_int(i)/norm
+         write(io_mass,*) exp_mass(i),-exp_int(i)
       enddo
       write(io_mass,*)'&'
+
     endif
 
   endif !ex
@@ -805,36 +874,20 @@ rd: do
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   
  ! compute deviation exp-theor.
-  if(exdat)then
+  if(expdat .or. nistdat)then
 
     rms  = 0
     nn   = 0
     kkk  = 0
     kkkk = 0
 
-    !> because NIST is in integer, convert to int.
-    !do j = 1, list_length
-    !  if ( nint(sorted_masses(j)) == stored(
-    !  store = nint(j)
-    !  if ( exp_mass(i) == nint(sorted_masses(j))) then
-    !        r = sorted_intensities(j) - (exp_int(i) / norm)
-    !        !write(*,*) i, exp_mass(i), exp_int(i)
-    !        !write(*,*) j, sorted_masses(j), sorted_intensities(j) 
-    !        !write(*,*) r
-    !        kkk = kkk + 1
-    !        if ( sorted_intensities(j) > 2.5_wp) kkkk = kkkk + 1
-    !        rms = rms + abs(r)
-    !      endif
-    !    endif
-    !  enddo il
 
-    ! bring exp to the right order of magnitude 
-    do i = 1, exp_entries
-      exp_int(i) = exp_int(i) / norm
-    enddo
-
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !> this is for integer masses
     !> calculate integer list of theor. masses
     store_int = 0
+
+    allocate(int_ms(list_length))
 
     do j = 1, list_length 
       int_ms(j) = nint(sorted_masses(j))
@@ -872,14 +925,8 @@ rd: do
     do i = 1, new_length
       added_masses(i)      = store_mass(i)
       added_intensities(i) = (store_int(i)/maxval(store_int)*100.0_wp)
-      write(*,*) added_masses(i), added_intensities(i)
+    !  write(*,*) added_masses(i), added_intensities(i)
     enddo
-      write(*,*) 
-    do i = 1, exp_entries
-      write(*,*) exp_mass(i), exp_int(i)
-    enddo
-      write(*,*) 
-      write(*,*) 
 
 
 ol: do i = 1, exp_entries
@@ -896,6 +943,45 @@ il:   do j = 1, new_length
       enddo il
     enddo ol
 
+!  new_length = 0
+!  sm = 0
+!  do i = 1, list_length 
+!
+!    store_check_list = sorted_masses(i)
+!
+!    store_intensities = 0.0_wp
+!
+!    do i = 1, list_length
+!      if (sorted_masses(i) - store_check_list <= 1.0d-2)then
+!        store_intensities = store_intensities + sorted_intensities(j)
+!        store_mass = store_intensities + sorted_intensities(j)
+!!        store_intensities = sorted_masses(i) - sorted_masses(i-1)
+!!        write(*,*) i, sorted_masses(i-1), sorted_masses(i), store_intensities
+!      endif
+!    enddo
+!
+!     if(sm /= store_check_list) new_length = new_length + 1
+!     sm = store_check_list
+!
+!  stop
+!
+!
+!
+!ol: do i = 1, exp_entries
+!il:   do j = 1, list_length
+!        if ( exp_int(i) > 5.0_wp )then 
+!          !if ( nint(exp_mass(i)) == added_masses(j) ) then
+!          if ( exp_mass(i) == sorted_masses(j) ) then
+!            r = added_intensities(j) - exp_int(i)
+!            kkk = kkk + 1
+!            if ( added_intensities(j) > 2.5_wp) kkkk = kkkk + 1
+!            rms = rms + abs(r)
+!          endif
+!        endif
+!      enddo il
+!    enddo ol
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     write(*,*)'MAD(exptl./theor.) = ', rms / kkk
     write(*,*)'# exptl. > 5 %     = ', kkk
@@ -1036,7 +1122,7 @@ subroutine match(added_masses, added_intensities, new_length, &
 
   
   dot = sum1**2 / (sum2 * sum3)
-  write(*,*) 'DOT', dot
+  !write(*,*) 'DOT', dot
   
   deallocate(w_exp, w_thr)
 
@@ -1077,7 +1163,6 @@ subroutine match(added_masses, added_intensities, new_length, &
   fr   = 0.0_wp
   cnt = 0
 
-  write(*,*) ' PP ', pp
   allocate (p(2,pp))
 
   do i = 1, exp_entries
@@ -1086,17 +1171,12 @@ subroutine match(added_masses, added_intensities, new_length, &
         cnt = cnt + 1
         p(1,cnt) = w_exp(i)
         p(2,cnt) = w_thr(j)
-        !write(*,*) cnt
-        !write(*,*) ' P1 ', p(1,cnt)
-        !write(*,*) ' P2 ', p(2,cnt)
-        !write(*,*) 
       endif
     enddo 
   enddo 
   
   ! ardous loop 
   call calcfr(pp,p,sum4)
-!  call calcfr(pp,w,sum4)
   if (pp == new_length) sum4 = sum4 + 1.0_wp
   !write(*,*) 'SUM4', sum4
   !write(*,*) 'numcalc', numcalc
