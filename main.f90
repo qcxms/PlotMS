@@ -92,22 +92,25 @@ program plotms
   character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
+  character(len=:), allocatable  :: exp_dat
 
   !!!!!!!!!!!!!!!!!!!!!
   integer :: save_line
   integer :: sm
-  integer, allocatable :: int_ms(:)
+  integer, allocatable :: int_exp(:), int_thr(:)
   integer :: store_check_list
-  integer :: new_length
-  integer :: store_mass(1000)
+  integer :: new_length_thr, new_length_exp
   real(wp) :: store_intensities
-  real(wp), allocatable :: added_intensities(:)
-  real(wp), allocatable :: added_masses(:)
-  real(wp) :: store_int(1000)
-  !real(wp) :: store_ms(1000)
+  real(wp), allocatable :: added_thr_intensities(:), added_exp_intensities(:)
+  real(wp), allocatable :: added_thr_masses(:), added_exp_masses(:)
+  real(wp) :: store_thr_int(1000)
+  real(wp) :: store_exp_int(1000)
+  real(wp) :: store_thr_mass(1000)
+  real(wp) :: store_exp_mass(1000)
   !real(wp) :: store_check_list
   !integer, allocatable :: added_masses(:)
   !integer, allocatable :: exp_mass (:)
+  !integer :: store_mass(1000)
   !!!!!!!!!!!!!!!!!!!!!
 
   verbose       = .false.
@@ -135,6 +138,7 @@ program plotms
  !xname='~/.mass_raw.agr'
  !xname='~/.mass_jay.agr'
   fname=''
+  exp_dat='exp.dat'
   
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! start loop reading arguments
@@ -161,12 +165,14 @@ program plotms
   !  -m set minimum value for m/z, so 100% value will be calc. for higher values (CID)
   !  -p calculate NO isotope pattern
   !  -i set minimum intensity that is considered in rel. intensity percent 
+  !  --exp provide exp. input file (in .csv format)
   
   do i = 1, 9
      if(index(arg(i),'-a') /= 0)  cthr   = -1000.0_wp
      if(index(arg(i),'-v') /= 0)  verbose   = .true.
      if(index(arg(i),'-f') /= 0)  fname  = arg(i+1)
      if(index(arg(i),'-p') /= 0)  noIso  = .true.
+     if(index(arg(i),'--exp') /= 0) exp_dat = arg(i+1)
 
      ! if = 0, unity intensities are regarded
      if(index(arg(i),'-t') /= 0) then
@@ -205,6 +211,7 @@ program plotms
      endif
   enddo
 
+  write(*,*) 'Experimental file ', exp_dat, 'read'
   
   xname = '~/.mass_raw.agr'
   
@@ -598,8 +605,8 @@ program plotms
   imax=0
   imin=0
   
-  inquire(file='exp.dat',exist=expdat)
   inquire(file='nist.dat',exist=nistdat)
+
   
   if(nistdat) then
     write(*,*) 'Reading nist.dat ...'
@@ -666,9 +673,19 @@ rd: do
 
   !!!!!!!!!!!!!!!!!!!!!
   !> if it is a csv file
+
+
+  if ( exp_dat == 'exp.dat') then
+    inquire(file='exp.dat',exist=expdat)
+  elseif (exp_dat /= 'exp.dat') then
+    inquire(file=exp_dat,exist=expdat)
+  else
+    write(*,*) 'No experimental file given - No matching score produced'
+  endif
+
   if (expdat) then
     write(*,*) 'Reading exp.dat ...'
-    open( file = 'exp.dat', newunit = io_exp, status = 'old')
+    open( file = exp_dat, newunit = io_exp, status = 'old')
 
     exp_entries = 0
 
@@ -885,26 +902,29 @@ rd: do
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !> this is for integer masses
     !> calculate integer list of theor. masses
-    store_int = 0
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    store_thr_int = 0
 
-    allocate(int_ms(list_length))
+    allocate(int_thr(list_length))
 
+    !> transfer to integer
     do j = 1, list_length 
-      int_ms(j) = nint(sorted_masses(j))
+      int_thr(j) = nint(sorted_masses(j))
     enddo
 
-    new_length = 0
+
+    new_length_thr = 0
     sm = 0
 
     do i = 1, list_length 
       store_intensities = 0.0_wp
 
-      store_check_list = int_ms(i)
+      store_check_list = int_thr(i)
 
-      if(sm /= store_check_list) new_length = new_length + 1
+      if(sm /= store_check_list) new_length_thr = new_length_thr + 1
 
       do j = 1, list_length
-        if (store_check_list == int_ms(j))then
+        if (store_check_list == int_thr(j))then
           store_intensities = store_intensities + sorted_intensities(j)
         endif
 
@@ -912,31 +932,78 @@ rd: do
 
       sm = store_check_list
 
-      store_int(new_length) = store_intensities
-      store_mass(new_length) = store_check_list
+      store_thr_int (new_length_thr) = store_intensities
+      store_thr_mass(new_length_thr) = store_check_list
 
-      !write(*,*) store_check_list, new_length, added_intensities(new_length)
+      !write(*,*) store_check_list, new_length_thr, added_intensities(new_length_thr)
         
     enddo
 
-    allocate(added_intensities(new_length), &
-             added_masses(new_length))
+    allocate(added_thr_intensities(new_length_thr), &
+             added_thr_masses(new_length_thr))
 
-    do i = 1, new_length
-      added_masses(i)      = store_mass(i)
-      added_intensities(i) = (store_int(i)/maxval(store_int)*100.0_wp)
+    do i = 1, new_length_thr
+      added_thr_masses(i)      = store_thr_mass(i)
+      added_thr_intensities(i) = (store_thr_int(i)/maxval(store_thr_int)*100.0_wp)
     !  write(*,*) added_masses(i), added_intensities(i)
     enddo
 
 
-ol: do i = 1, exp_entries
-il:   do j = 1, new_length
-        if ( exp_int(i) > 5.0_wp )then 
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !> for experimental masses in integer
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    store_exp_int = 0
+    allocate(int_exp(exp_entries))
+
+    do j = 1, exp_entries 
+      int_exp(j) = nint(exp_mass(j))
+    enddo
+
+    new_length_exp = 0
+    sm = 0
+
+    do i = 1, exp_entries 
+      store_intensities = 0.0_wp
+
+      store_check_list = int_exp(i)
+
+      if(sm /= store_check_list) new_length_exp = new_length_exp + 1
+
+      do j = 1, exp_entries
+        if (store_check_list == int_exp(j))then
+          store_intensities = store_intensities + exp_int(j)
+        endif
+
+      enddo
+
+      sm = store_check_list
+
+      store_exp_int(new_length_exp) = store_intensities
+      store_exp_mass(new_length_exp) = store_check_list
+
+      !write(*,*) store_check_list, new_length_exp, added_intensities(new_length_exp)
+        
+    enddo
+
+    allocate(added_exp_intensities(new_length_exp), &
+             added_exp_masses(new_length_exp))
+
+    do i = 1, new_length_exp
+      added_exp_masses(i)      =  store_exp_mass(i)
+      added_exp_intensities(i) = (store_exp_int(i)/maxval(store_exp_int)*100.0_wp)
+    !  write(*,*) added_masses(i), added_intensities(i)
+    enddo
+
+
+ol: do i = 1, new_length_exp
+il:   do j = 1, new_length_thr
+        if ( added_exp_intensities(i) > 5.0_wp )then 
           !if ( nint(exp_mass(i)) == added_masses(j) ) then
-          if ( exp_mass(i) == added_masses(j) ) then
-            r = added_intensities(j) - exp_int(i)
+          if ( added_exp_masses(i) == added_thr_masses(j) ) then
+            r = added_thr_intensities(j) - added_exp_intensities(i)
             kkk = kkk + 1
-            if ( added_intensities(j) > 2.5_wp) kkkk = kkkk + 1
+            if ( added_thr_intensities(j) > 2.5_wp) kkkk = kkkk + 1
             rms = rms + abs(r)
           endif
         endif
@@ -1007,8 +1074,10 @@ il:   do j = 1, new_length
 
     !call match_accurate(sorted_masses, sorted_intensities, list_length, &
     !            exp_entries, exp_mass, exp_int,score,tmax)
-    call match(added_masses, added_intensities, new_length, &
-                exp_entries, exp_mass, exp_int,score,tmax)
+    !call match(added_masses, added_intensities, new_length, &
+    !            exp_entries, exp_mass, exp_int,score,tmax)
+    call match(added_thr_masses, added_thr_intensities, new_length_thr, &
+                new_length_exp, added_exp_masses, added_exp_intensities,score,tmax)
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
