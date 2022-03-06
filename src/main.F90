@@ -37,7 +37,8 @@ program plotms
   use isotope_pattern, only: isotope
   use version, only: print_version 
   use qcxms_boxmuller, only: vary_energies
-  use qcxms_readcommon
+  use readcommon
+  use mctc_env, only : error_type, get_argument
   use xtb_mctc_accuracy, only: wp
   use xtb_mctc_convert
   use xtb_mctc_symbols, only: toSymbol
@@ -60,6 +61,7 @@ program plotms
   integer :: sorted_index
   integer :: list_length
   integer :: exp_entries
+  integer :: iarg, narg
 
   real(wp) :: xx(100),tmax,r,rms,norm,cthr,cthr2
   real(wp) :: chrg,chrg2,checksum,score
@@ -86,13 +88,12 @@ program plotms
   logical  :: expdat, nistdat
   logical  :: ex,ex1,ex2,ex3,ex4
   logical  :: noIso, Plasma
-  logical  :: args = .false.
   
   ! fname=<qcxms.res> or result file, xname contains the mass.agr plot file
-  character(len=80)  :: arg(10)
   character(len=80)  :: xname
   character(len=:), allocatable  :: fname,fname1,fname2,fname3,fname4
   character(len=:), allocatable  :: exp_dat
+  character(len=:), allocatable :: arg
 
   !!!!!!!!!!!!!!!!!!!!!
   integer :: save_line
@@ -113,9 +114,11 @@ program plotms
   !integer :: store_mass(1000)
   !!!!!!!!!!!!!!!!!!!!!
 
+  expdat        = .false.
   verbose       = .false.
   small         = .false.
   isec          = 0
+  iarg          = 0
   norm          = 1.0
   nagrfile      = 410
   mzmin         = 10
@@ -138,16 +141,7 @@ program plotms
  !xname='~/.mass_raw.agr'
  !xname='~/.mass_jay.agr'
   fname=''
-  exp_dat='exp.dat'
-  
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! start loop reading arguments
-  do i=1,9
-     arg(i)=' '
-    call get_command_argument(i,arg(i))
-    if (arg(i) /= ' ') args = .true. 
-  enddo
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  exp_dat="exp.dat"
   
   ! start loop processing aruments
   
@@ -165,53 +159,89 @@ program plotms
   !  -m set minimum value for m/z, so 100% value will be calc. for higher values (CID)
   !  -p calculate NO isotope pattern
   !  -i set minimum intensity that is considered in rel. intensity percent 
-  !  --exp provide exp. input file (in .csv format)
-  
-  do i = 1, 9
-     if(index(arg(i),'-a') /= 0)  cthr   = -1000.0_wp
-     if(index(arg(i),'-v') /= 0)  verbose   = .true.
-     if(index(arg(i),'-f') /= 0)  fname  = arg(i+1)
-     if(index(arg(i),'-p') /= 0)  noIso  = .true.
-     if(index(arg(i),'--exp') /= 0) exp_dat = arg(i+1)
+  !  -e provide exp. input file (in .csv format)
 
-     ! if = 0, unity intensities are regarded
-     if(index(arg(i),'-t') /= 0) then
-        call readl(arg(i+1),xx,nn)
-        cthr=xx(1)
-     endif
+  narg = command_argument_count()
 
-     ! set width distr. of boltz sampling
-     if(index(arg(i),'-w') /= 0) then
-        call readl(arg(i+1),xx,nn)
-        chrg_wdth=xx(1)
-     endif
+  do while(iarg < narg)
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
 
-     ! set number of cascading runs
-     if(index(arg(i),'-s') /= 0) then
-        call readl(arg(i+1),xx,nn)
-        isec=int(xx(1))
-     endif
+    select case(arg)
+     !if(index(arg(i),'-a') /= 0)  cthr   = -1000.0_wp
+     !if(index(arg(i),'-v') /= 0)  verbose   = .true.
+     !if(index(arg(i),'-f') /= 0)  fname  = arg(i+1)
+     !if(index(arg(i),'-p') /= 0)  noIso  = .true.
+     !if(index(arg(i),'-e') /= 0) exp_dat = arg(i+1)
 
-     ! set minimum mass
-     if(index(arg(i),'-m') /= 0)then
-        call readl(arg(i+1),xx,nn)
-        mzmin=int(xx(1))
-     endif
 
-     ! get initial charge of system <- not used anymore
-     if(index(arg(i),'-c') /= 0)then
-        call readl(arg(i+1),xx,nn)
-        total_charge = real(xx(1),wp)
-     endif
-     ! set minimum intensity that is considered for the output 
-     ! default: >1%. For all (>0%): set = 0
-     if(index(arg(i),'-i') /= 0)then
-        call readl(arg(i+1),xx,nn)
-        min_intensity = real(xx(1),wp)
-     endif
+   case("-a")                 
+     cthr    = -1000.0_wp
+   case("-v","--verbose")     
+     verbose = .true.
+   case("-p","--noisotope")   
+     noIso   = .true.
+
+   case("-t","--unity")
+     iarg = iarg + 1
+     call get_argument(iarg, arg)
+     call readl(arg,xx,nn)
+     cthr = real(xx(1),wp)
+
+  !> -f filename or  -f <name_of_res_file>
+   case("-f","--file")        
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
+    fname   = arg
+
+  !  -e provide exp. input file (in .csv format)
+   case("-e","--exp")         
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
+    exp_dat = arg
+
+   ! set width distr. of boltz sampling
+   case("-w","--width")
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
+    call readl(arg,xx,nn)
+    chrg_wdth = real(xx(1),wp)
+
+   ! set number of cascading runs
+   case("-s","--cascades")
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
+    call readl(arg,xx,nn)
+    isec = int(xx(1))
+
+   ! set minimum mass
+   case("-m","--min")
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
+    call readl(arg,xx,nn)
+    mzmin=int(xx(1))
+
+   ! set minimum intensity that is considered for the output 
+   ! default: >1%. For all (>0%): set = 0
+   case("-i","--mzmin")
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
+    call readl(arg,xx,nn)
+    min_intensity = real(xx(1),wp)
+
+   ! get initial charge of system <- not used anymore
+   case("-c","--charge")
+    iarg = iarg + 1
+    call get_argument(iarg, arg)
+    call readl(arg,xx,nn)
+    total_charge = real(xx(1),wp)
+
+
+    case default
+      error stop ' -- Unrecognized Keyword -- '
+    end select
   enddo
 
-  write(*,*) 'Experimental file ', exp_dat, 'read'
   
   xname = '~/.mass_raw.agr'
   
@@ -264,15 +294,24 @@ program plotms
 
   call print_version
   
-  write(*,'(6x,''   -> Reading file: '',(a)         )')trim(fname)
+  write(*,'(6x,''-> Reading .res file: '',2x,(a))')trim(fname)
+
+  !> write out if compared
+  if ( exp_dat == 'exp.dat') then
+    inquire(file='exp.dat',exist=expdat)
+  elseif (exp_dat /= 'exp.dat') then
+    inquire(file=exp_dat,exist=expdat)
+  endif
+  if (expdat) write(*,'(6x,''-> Experimental file: '',2x, (a))') exp_dat
+
+  !> give info about xmgrace file (if verbose)
   if (verbose) write(*,'(6x ''   -> xmgrace file body '',(a)         )')trim(xname)
-  write(*,*)
   write(*,*)
   
   ! ------------------------------------------------------------------------------------------------------!
   ! execute arguments
  
-  if (args) then
+  if (narg > 0 ) then
     write(*,'(50(''!''))')
     write(*,'('' The following settings are being used :  '')')
     write(*,*)
@@ -303,11 +342,11 @@ program plotms
     endif
 
     ! -t (choose if unity intensities or normal)
-    if(cthr >= 0)then
-      write(*,'('' - couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
-    else
-      write(*,'('' - counting all fragments with unity charge (frag. overview)'')')
-    endif
+    !if(cthr >= 0)then
+    !  write(*,'('' - couting ions with charge from '',f4.1,'' to '',f4.1)')   cthr,cthr2 + total_charge
+    !else
+    !  write(*,'('' - counting all fragments with unity charge (frag. overview)'')')
+    !endif
     write(*,*)
     write(*,'(50(''!''))')
   endif
@@ -675,16 +714,9 @@ rd: do
   !> if it is a csv file
 
 
-  if ( exp_dat == 'exp.dat') then
-    inquire(file='exp.dat',exist=expdat)
-  elseif (exp_dat /= 'exp.dat') then
-    inquire(file=exp_dat,exist=expdat)
-  else
-    write(*,*) 'No experimental file given - No matching score produced'
-  endif
 
   if (expdat) then
-    write(*,*) 'Reading exp.dat ...'
+    write(*,*) 'Reading ', exp_dat,' ...'
     open( file = exp_dat, newunit = io_exp, status = 'old')
 
     exp_entries = 0
