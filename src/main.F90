@@ -97,7 +97,6 @@ program plotms
   character(len=:), allocatable :: arg
 
   !!!!!!!!!!!!!!!!!!!!!
-  integer :: save_line
   integer :: sm
   integer, allocatable :: int_exp(:), int_thr(:)
   integer :: store_check_list
@@ -742,7 +741,6 @@ rd: do
       &       exp_int(exp_entries))
 
     kk = 0
-    save_line = 0
     iocheck=0
 
     !>> count the intensities and masses
@@ -753,7 +751,6 @@ rd: do
       do k=1,80
         if(line(k:k) == ',') then
           line(k:k)=' '
-          save_line = k
         endif
       enddo
 
