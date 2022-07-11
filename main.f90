@@ -231,6 +231,11 @@ program plotms
         fname = 'tmpqcxms_cid.res'
       endif
     endif
+  ! for -f option
+  elseif (index(fname,'cid') /= 0) then
+  spec = 2 ! CID
+  else
+  spec = 1 ! EI
   endif
 
   
