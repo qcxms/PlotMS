@@ -16,7 +16,7 @@ module isotope_pattern
   contains
 
 subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
-    no_isotopes, index_mass, exact_intensity, isotope_masses)
+    no_isotopes, index_mass, exact_intensity, isotope_masses, z_chrg)
 
   integer :: ntot,iat_save(*),maxatm
   integer :: niso(200)
@@ -27,6 +27,7 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
 !  integer :: tmp_intensity
   integer :: store_int(1000)
   integer :: mzmin
+  integer :: z_chrg
 
   real(wp) :: rnd(nrnd,maxatm)
   real(wp) :: r,sum_prob
@@ -34,7 +35,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   real(wp) :: list_masses(nrnd)
   real(wp),allocatable :: isotope_masses(:)
 
-  real(wp) :: save_mass(nrnd)
   real(wp) :: current_mass
 
   real(wp), allocatable :: exact_intensity(:)
@@ -126,6 +126,19 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
         prob(17,2)        = 24.24_wp
         massiso(17,1)     = 34.968852_wp
         massiso(17,2)     = 36.965902_wp
+
+   ! 20 Ca (Calcium)
+        niso(20)          = 5
+        prob(20,1)        = 96.94_wp
+        prob(20,2)        = 0.65_wp
+        prob(20,3)        = 0.14_wp
+        prob(20,4)        = 2.09_wp
+        prob(20,5)        = 0.18_wp
+        massiso(20,1)     = 39.962591_wp
+        massiso(20,2)     = 41.958618_wp
+        massiso(20,3)     = 42.958766_wp
+        massiso(20,4)     = 43.955482_wp
+        massiso(20,5)     = 45.953688_wp      
   
    ! 22 Ti (Titanium) 
         niso(22)          = 5           
@@ -344,6 +357,13 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
           prob(53,1)      = 100.00_wp
           massiso(53,1)   = 126.904473_wp
 
+   ! 57 La (Lanthanum)
+          niso(57)        = 2          
+          prob(57,1)      = 0.09_wp
+          prob(57,2)      = 99.91_wp
+          massiso(57,1)   = 137.907112_wp
+          massiso(57,2)   = 138.909477_wp
+
    ! 74 W (Tungsten)
           niso(74)        = 5          
           prob(74,1)      = 0.12_wp
@@ -414,7 +434,6 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   ! postprocessing starts here 
   
   prob = prob * 0.01_wp
-  save_mass = 0.0_wp
   list_masses = 0.0_wp
   index_mass = 0
   loop = 0
@@ -463,7 +482,8 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
       enddo
       xmass = xmass + x
     enddo
-      current_mass = xmass !/ real(abs(z_chrg),wp)
+
+      current_mass = xmass / real(abs(z_chrg),wp)
 
       there = .true.
       if ( current_mass > mzmin ) then 
@@ -519,7 +539,7 @@ noiso:  do
          xmass = xmass + x
       enddo
 
-      current_mass = xmass !/ float(abs(z_chrg))
+      current_mass = xmass / float(abs(z_chrg))
 
       there = .true.
       !> only values larger than user input 
