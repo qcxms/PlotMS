@@ -4,7 +4,7 @@
 
 **Installation**
 
-Put the `plotms` [executable](https://github.com/qcxms/PlotMS/releases) and the `.mass_raw.agr` files into the `$HOME/bin/` folder. 
+Put the `plotms` [executable](https://github.com/qcxms/PlotMS/releases) and the `.mass_raw.agr` files into the `$HOME` folder. 
 
 **Compiling**
 
