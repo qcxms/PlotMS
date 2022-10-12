@@ -864,7 +864,7 @@ rd: do
       read (io_raw,'(a)') line
       if( .not. small )then 
          if(index(line,'world 10') /= 0)then
-            write(line,'(''@    world '',i3,'', -105,'',i3,'', 100'')') imin, imax + 5
+            write(line,'(''@    world '',i3,'', -105,'',i4,'', 100'')') imin, imax + 5
          endif
          if(index(line,'xaxis  tick major') /= 0)then
             line='@    xaxis  tick major 20'
@@ -1114,6 +1114,10 @@ il:   do j = 1, new_length_thr
     !            exp_entries, exp_mass, exp_int,score,tmax)
     call match(added_thr_masses, added_thr_intensities, new_length_thr, &
                 new_length_exp, added_exp_masses, added_exp_intensities,score,tmax)
+                write(*,*) "added_thr_masses, added_thr_intensities, new_length_thr, &
+                new_length_exp, added_exp_masses, added_exp_intensities,score,tmax"
+                  write(*,*) added_thr_masses, added_thr_intensities, new_length_thr, &
+                new_length_exp, added_exp_masses, added_exp_intensities,score,tmax
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
@@ -1289,6 +1293,10 @@ subroutine match(added_masses, added_intensities, new_length, &
   
   fr = sum4 / float(pp)
   score = (new_length * dot + pp * fr) / (new_length + pp)
+  write(*,*) "Fr is:", fr
+   write(*,*) "Dot is:", dot
+    write(*,*) "new_length", new_length
+     write(*,*) "PP is:", pp
   return
 end subroutine match
 

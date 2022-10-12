@@ -477,8 +477,8 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
       do iso = 1, niso(iti)
          if ( prob(iti,iso) > p1 ) then
            x = massiso(iti,iso)
+           p1 = prob(iti,iso)
          endif
-         p1 = prob(iti,iso)
       enddo
       xmass = xmass + x
     enddo
