@@ -35,6 +35,8 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   real(wp) :: list_masses(nrnd)
   real(wp),allocatable :: isotope_masses(:)
 
+  real(wp) :: mipmax, iipmax ! mass and intensity of highest isotope peak
+  integer :: indexipmax ! index of peak with highest intensity
   real(wp) :: current_mass
 
   real(wp), allocatable :: exact_intensity(:)
@@ -468,57 +470,8 @@ subroutine isotope(counter, mzmin, ntot, iat_save, maxatm, rnd, &
   enddo
 
 
-  !Calculate NO isotope pattern
-  if ( no_isotopes ) then 
-    xmass=0
-    do i = 1, ntot
-      iti = iat_save(i)
-      p1 = 0.0_wp
-      do iso = 1, niso(iti)
-         if ( prob(iti,iso) > p1 ) then
-           x = massiso(iti,iso)
-           p1 = prob(iti,iso)
-         endif
-      enddo
-      xmass = xmass + x
-    enddo
-
-      current_mass = xmass / real(abs(z_chrg),wp)
-
-      there = .true.
-      if ( current_mass > mzmin ) then 
-        !> loop over all entries in the list
-noiso:  do 
-          loop = loop + 1
-          !>> write if there is no entry
-          if ( list_masses(loop) == 0.0_wp ) then
-            there = .false.
-            exit noiso
-          !>> true if already in list, end
-          elseif     ( abs(list_masses(loop) - current_mass) < 1.0d-10 ) then
-            there = .true.
-            store_int(loop) = store_int(loop) + 1
-            exit noiso
-          !>> false if not in list, store
-          elseif     ( abs(list_masses(loop) - current_mass) > 1.0d-10 ) then
-            there = .false.
-            cycle noiso
-          endif
-        enddo noiso
-        loop = 0
-
-        !> if it is not in the list, add it
-        if ( .not. there ) then
-          index_mass = index_mass + 1
-          list_masses(index_mass) = current_mass
-          store_int(index_mass) = store_int(index_mass) + 1
-          !write(*,*) list_masses(index_mass)
-        endif
-
-      endif
-
-  ! Calculate isotope pattern
-  else                      
+  
+  ! Calculate isotope pattern                     
 
     ! loop over random number runs
     do n = 1, nrnd
@@ -577,7 +530,6 @@ inner:  do
 
 
     enddo
-  endif
 
 
   allocate(exact_intensity(index_mass))
@@ -592,6 +544,20 @@ inner:  do
     !write(*,*) exact_intensity(loop)
   enddo
 
+   
+
+
+  ! if no isotopes we take here the peak of the isotope pattern with the highest intensity
+  if ( no_isotopes ) then 
+  iipmax = maxval(exact_intensity)
+  indexipmax = maxloc(exact_intensity, dim = 1)
+  mipmax = isotope_masses(indexipmax)
+  deallocate(exact_intensity,isotope_masses)
+  index_mass = 1
+  allocate(exact_intensity(1),isotope_masses(1))
+  exact_intensity(1)=iipmax
+  isotope_masses(1)=mipmax
+  endif
 
 
 end subroutine isotope
