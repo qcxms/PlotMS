@@ -547,17 +547,17 @@ inner:  do
    
 
 
-! if no isotopes we take here the peak of the isotope pattern with the highest intensity
-if ( no_isotopes ) then 
-iipmax = maxval(exact_intensity)
-indexipmax = maxloc(exact_intensity, dim = 1)
-mipmax = isotope_masses(indexipmax)
-deallocate(exact_intensity,isotope_masses)
-index_mass = 1
-allocate(exact_intensity(1),isotope_masses(1))
-exact_intensity(1)=iipmax
-isotope_masses(1)=mipmax
-endif
+  ! if no isotopes we take here the peak of the isotope pattern with the highest intensity
+  if ( no_isotopes ) then 
+  iipmax = maxval(exact_intensity)
+  indexipmax = maxloc(exact_intensity, dim = 1)
+  mipmax = isotope_masses(indexipmax)
+  deallocate(exact_intensity,isotope_masses)
+  index_mass = 1
+  allocate(exact_intensity(1),isotope_masses(1))
+  exact_intensity(1)=iipmax
+  isotope_masses(1)=mipmax
+  endif
 
 
 end subroutine isotope
