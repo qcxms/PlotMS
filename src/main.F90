@@ -1114,10 +1114,6 @@ il:   do j = 1, new_length_thr
     !            exp_entries, exp_mass, exp_int,score,tmax)
     call match(added_thr_masses, added_thr_intensities, new_length_thr, &
                 new_length_exp, added_exp_masses, added_exp_intensities,score,tmax)
-                write(*,*) "added_thr_masses, added_thr_intensities, new_length_thr, &
-                new_length_exp, added_exp_masses, added_exp_intensities,score,tmax"
-                  write(*,*) added_thr_masses, added_thr_intensities, new_length_thr, &
-                new_length_exp, added_exp_masses, added_exp_intensities,score,tmax
     write(*,*)
     write(*,*)"!!!!!!!!!!!!!!!!!!!!!!! "
     write(*,*)"  Matching score:  "
@@ -1187,7 +1183,8 @@ subroutine match(added_masses, added_intensities, new_length, &
   allocate(w_exp(exp_entries))
   norm = 0.0_wp
   do i = 1, exp_entries
-    w_exp(i) = exp_mass(i)**2 * exp_int(i)**0.6_wp
+   ! w_exp(i) = exp_mass(i)**2 * exp_int(i)**0.6_wp
+       w_exp(i) = exp_mass(i)**3 * exp_int(i)**0.6_wp
     norm = norm + w_exp(i)**2
   enddo 
 
@@ -1201,7 +1198,8 @@ subroutine match(added_masses, added_intensities, new_length, &
   allocate(w_thr(new_length))
   norm = 0.0_wp
   do j = 1, new_length
-    w_thr(j) = (added_masses(j))**2 * ( added_intensities(j) )**0.6_wp 
+    !w_thr(j) = (added_masses(j))**2 * ( added_intensities(j) )**0.6_wp 
+     w_thr(j) = (added_masses(j))**3 * ( added_intensities(j) )**0.6_wp 
     norm = norm + w_thr(j)**2
   enddo 
 
