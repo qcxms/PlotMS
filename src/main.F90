@@ -236,6 +236,14 @@ program plotms
     call readl(arg,xx,nn)
     total_charge = real(xx(1),wp)
 
+     ! print version of program
+   case("--version")
+    call print_version
+    stop
+
+     ! print help
+    case("-h","--help")
+    call print_help
 
     case default
       error stop ' -- Unrecognized Keyword -- '
@@ -1330,6 +1338,32 @@ subroutine calcfr(pp,pair,sum4)
   
 end subroutine calcfr
 
+
+subroutine print_help()
+implicit none
+
+      write(*,*)
+      write(*,'(1x, ''usage        :'')')
+      write(*,'(1x, ''plotms [options]'')')
+      write(*,*)
+      write(*,'(1x, ''plotms needs a qcxms.res qcxms_cid.res tmpqcxms.res or tmpqcxms_cid.res file from a qcxms calculation in the current directory.'')')
+      write(*,*)
+      write(*,'(/,1x,''command line arguments'')')
+      write(*,'(5x,''-a: count charges from -1000 (cthr) to cthr2'')')
+      write(*,'(5x,''-v: print spectra "mass % intensity  counts   Int. exptl" to stdout;'')')
+      write(*,'(5x,''   with "Int. exptl" (experimental) taken from exp.dat but not all'')') 
+      write(*,'(5x,''   exp peaks are exported if no theoretical counterpart exists'')')
+      write(*,'(5x,''-f <name_of_res_file>: give name of res file'')')
+      write(*,'(5x,''-t: couting ions with charge x to y (give the value, e.g. "-t 1 2"  for charge 1 to 2)'')')
+      write(*,'(5x,''-w [real]: broadening the charges by an SD '')')
+      write(*,'(5x,''-s: Take only secondary and tertiary fragmentations (give the value, e.g. "-s 2" for secondary)'')')
+      write(*,'(5x,''-m [int] set minimum value for m/z, so 100% value will be calc. for higher values (CID)'')')
+      write(*,'(5x,''-p calculate NO isotope pattern, highest peak of isotope pattern is used'')')
+      write(*,'(5x,''-i [real]: set minimum intensity that is considered in rel. intensity percent'')')
+      write(*,'(5x,''-e: provide exp. input file (in .csv format)'')')
+      write(*,'(5x,''--version: print version of this program'')')
+      stop '   [-h] displayed. exit.'
+end subroutine print_help
 
 ! Get the absolute path to file
 ! Note, this function replaces shell tilde ~/ with the explicit home dir string.
