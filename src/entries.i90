@@ -1,3 +1,4 @@
+# 1 "/tmp1/coding/PlotMS/src/entries.f90"
 module count_entries
   use xtb_mctc_accuracy, only: wp
   implicit none
@@ -12,7 +13,7 @@ module count_entries
       integer :: sum_index, i
       integer :: check
     
-      !real(wp) :: intensity(index_mass)
+!real(wp) :: intensity(index_mass)
       real(wp) :: xmass
       real(wp) :: isotope_masses(index_mass)
       real(wp) :: exact_intensity(index_mass)
@@ -23,12 +24,12 @@ module count_entries
 
       real(wp) :: mass_diff
     
-      !real(wp), allocatable :: list_masses(:)
-      !real(wp), allocatable :: save_list(:)
-      !real(wp), allocatable :: save_int(:)
-      !real(wp), allocatable :: intensity(:)
-      !real (wp) :: save_list(1000)
-      !real (wp) :: save_list(1000)
+!real(wp), allocatable :: list_masses(:)
+!real(wp), allocatable :: save_list(:)
+!real(wp), allocatable :: save_int(:)
+!real(wp), allocatable :: intensity(:)
+!real (wp) :: save_list(1000)
+!real (wp) :: save_list(1000)
 
       logical :: there = .true.
       logical :: int_masses
@@ -37,7 +38,7 @@ module count_entries
       loop = 0
       loop2 = 0
       check = 0
-      !count_mass = count_mass + index_mass
+!count_mass = count_mass + index_mass
       if(count_mass == 0)then
         sum_index =  index_mass
       else
@@ -45,11 +46,11 @@ module count_entries
       endif
 
 
-      !> loop over the list from the isotope subroutine
+!> loop over the list from the isotope subroutine
 outer: do loop2 = 1, index_mass 
         loop = 0
         if (int_masses) isotope_masses(loop2) = int(isotope_masses(loop2))
-        !> loop over all entries of new (check) list 
+!> loop over all entries of new (check) list
 inner:  do 
           loop = loop + 1
           if (int_masses) list_masses(loop) = int(list_masses(loop))
@@ -58,10 +59,10 @@ inner:  do
 
           if ( list_masses(loop) == 0.0_wp ) then
             there = .false.
-             !write(*,*) 'NULL'
+!write(*,*) 'NULL'
             exit inner
 
-          !elseif  ( list_masses(loop) == isotope_masses(loop2) ) then
+!elseif  ( list_masses(loop) == isotope_masses(loop2) ) then
           elseif  ( mass_diff < 1.0d0-10 .or. mass_diff == 0.0_wp) then
             there = .true.
             intensity(loop) = intensity(loop) +  1 * exact_intensity(loop2) &
@@ -70,8 +71,8 @@ inner:  do
             if (loop2 == index_mass ) exit inner
 
 
-          !>> false if not in list, store
-          !elseif ( list_masses(loop) /= isotope_masses(loop2) ) then
+!>> false if not in list, store
+!elseif ( list_masses(loop) /= isotope_masses(loop2) ) then
           elseif  ( mass_diff > 1.0d0-10 ) then
             there = .false.
             if (loop == sum_index ) exit inner
