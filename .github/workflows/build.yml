@@ -80,7 +80,7 @@ jobs:
 
     - name: Install GCC (Windows)
       if: ${{ contains(matrix.os, 'windows') && matrix.compiler == 'gnu' }}
-      uses: msys2/setup-msys2@v2
+      uses: msys2/setup-msys2@v4
       with:
         msystem: MINGW64
         update: false
@@ -102,7 +102,7 @@ jobs:
     - name: Cache Intel install
       if: ${{ matrix.compiler == 'intel' }}
       id: cache-install
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: /opt/intel/oneapi
         key: install-${{ matrix.compiler }}-${{ matrix.version }}-${{ matrix.os }}
@@ -226,7 +226,7 @@ jobs:
 
     - name: Upload package
       if: ${{ matrix.build == 'meson' && matrix.build-type != 'coverage' }}
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.PLOTMS_OUTPUT }}
         path: ${{ env.PLOTMS_OUTPUT }}
