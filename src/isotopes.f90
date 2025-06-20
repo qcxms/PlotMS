@@ -986,12 +986,7 @@ inner:  do
 
 
     enddo
-    write(*,*) 'number of peaks', index_mass
-    do i = 1, index_mass
-      write(*,*) list_masses(i), store_int(i)
-    enddo
-
-
+    
   allocate(exact_intensity(index_mass))
   allocate(isotope_masses(index_mass))
 
