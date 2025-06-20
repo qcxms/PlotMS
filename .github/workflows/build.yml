@@ -80,7 +80,7 @@ jobs:
 
     - name: Install GCC (Windows)
       if: ${{ contains(matrix.os, 'windows') && matrix.compiler == 'gnu' }}
-      uses: msys2/setup-msys2@v4
+      uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
         update: false
