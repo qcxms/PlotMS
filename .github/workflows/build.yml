@@ -1,66 +1,3 @@
-name: CI
-
-on: [push, pull_request]
-
-env:
-  BUILD_DIR: _build
-  DIST_DIR: _dist
-
-jobs:
-  gcc-meson-build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        fc: [gfortran-12]
-        cc: [gcc-12]
-    env:
-      FC: ${{ matrix.fc }}
-      CC: ${{ matrix.cc }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
-
-      - name: Install GCC & dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.fc }} ${{ matrix.cc }} libopenblas-dev
-          echo "FC=${{ matrix.fc }}" >> $GITHUB_ENV
-          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
-
-      - name: Install Meson & Ninja
-        run: pip install meson ninja
-
-      - name: Configure build (Meson – GNU)
-        run: |
-          # ensure a clean build dir
-          rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
-          meson setup ${{ env.BUILD_DIR }} \
-            --buildtype=debug \
-            --prefix=$PWD/${{ env.DIST_DIR }} \
-            --libdir=lib \
-            --warnlevel=0
-
-      - name: Build project
-        run: ninja -C ${{ env.BUILD_DIR }}
-
-      - name: Install into _dist
-        run: meson install -C ${{ env.BUILD_DIR }} --no-rebuild
-
-      - name: Package GNU build
-        run: |
-          tar cJvf build-gnu.tar.xz ${{ env.DIST_DIR }}
-          echo "BUILD_PACKAGE=build-gnu.tar.xz" >> $GITHUB_ENV
-
-      - name: Upload GNU build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-gnu
-          path: build-gnu.tar.xz
-
   intel-meson-build:
     runs-on: ubuntu-latest
     strategy:
@@ -70,7 +7,6 @@ jobs:
     env:
       FC: ${{ matrix.fc }}
       CC: ${{ matrix.cc }}
-      # pin specific oneAPI versions
       APT_PACKAGES: >-
         intel-oneapi-compiler-fortran-2022.1.0
         intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2022.1.0
@@ -112,8 +48,7 @@ jobs:
             --libdir=lib \
             --warnlevel=0 \
             -Dfortran_link_args="-lifcoremt -static" \
-            -Ddefault_library=static \
-            -Dlapack=mkl
+            -Ddefault_library=static
 
       - name: Build project
         run: ninja -C ${{ env.BUILD_DIR }}
