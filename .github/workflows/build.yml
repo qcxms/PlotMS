@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 env:
   BUILD_DIR: _build
+  DIST_DIR: _dist
 
 jobs:
   gcc-meson-build:
@@ -23,36 +24,42 @@ jobs:
         with:
           python-version: 3.x
 
-      - name: Install GCC and dependencies
+      - name: Install GCC & dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.fc }} ${{ matrix.cc }} libopenblas-dev
           echo "FC=${{ matrix.fc }}" >> $GITHUB_ENV
           echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
 
-      - name: Install Python packages
+      - name: Install Meson & Ninja
         run: pip install meson ninja
 
-      - name: Configure build (Meson GNU)
-        run: meson setup ${{ env.BUILD_DIR }} --prefix=/ --libdir=lib
+      - name: Configure build (Meson – GNU)
+        run: |
+          # ensure a clean build dir
+          rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
+          meson setup ${{ env.BUILD_DIR }} \
+            --buildtype=debug \
+            --prefix=$PWD/${{ env.DIST_DIR }} \
+            --libdir=lib \
+            --warnlevel=0
 
       - name: Build project
         run: ninja -C ${{ env.BUILD_DIR }}
 
-      - name: Install project
+      - name: Install into _dist
         run: meson install -C ${{ env.BUILD_DIR }} --no-rebuild
 
-      - name: Package build
+      - name: Package GNU build
         run: |
-          tar cJvf build-gnu.tar.xz -C / .
+          tar cJvf build-gnu.tar.xz ${{ env.DIST_DIR }}
           echo "BUILD_PACKAGE=build-gnu.tar.xz" >> $GITHUB_ENV
 
-      - name: Upload package
+      - name: Upload GNU build artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-gnu
           path: build-gnu.tar.xz
-
 
   intel-meson-build:
     runs-on: ubuntu-latest
@@ -63,6 +70,7 @@ jobs:
     env:
       FC: ${{ matrix.fc }}
       CC: ${{ matrix.cc }}
+      # pin specific oneAPI versions
       APT_PACKAGES: >-
         intel-oneapi-compiler-fortran-2022.1.0
         intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2022.1.0
@@ -76,10 +84,10 @@ jobs:
         with:
           python-version: 3.x
 
-      - name: Install Meson and Ninja
+      - name: Install Meson & Ninja
         run: pip install meson ninja
 
-      - name: Add Intel APT repository
+      - name: Add Intel oneAPI APT repo
         run: |
           wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
           sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
@@ -87,19 +95,22 @@ jobs:
           echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
           sudo apt-get update
 
-      - name: Install Intel oneAPI compilers and MKL
+      - name: Install Intel compilers & MKL
         run: |
           sudo apt-get install -y ${APT_PACKAGES}
           source /opt/intel/oneapi/setvars.sh
           echo "FC=ifort" >> $GITHUB_ENV
           echo "CC=icc" >> $GITHUB_ENV
-          printenv >> $GITHUB_ENV
 
-      - name: Configure build (Meson Intel)
+      - name: Configure build (Meson – Intel)
         run: |
+          rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
           source /opt/intel/oneapi/setvars.sh
           meson setup ${{ env.BUILD_DIR }} \
-            --prefix=/ --libdir=lib \
+            --buildtype=debug \
+            --prefix=$PWD/${{ env.DIST_DIR }} \
+            --libdir=lib \
+            --warnlevel=0 \
             -Dfortran_link_args="-lifcoremt -static" \
             -Ddefault_library=static \
             -Dlapack=mkl
@@ -107,13 +118,15 @@ jobs:
       - name: Build project
         run: ninja -C ${{ env.BUILD_DIR }}
 
-      - name: Install project
+      - name: Install into _dist
+        run: meson install -C ${{ env.BUILD_DIR }} --no-rebuild
+
+      - name: Package Intel build
         run: |
-          DESTDIR=$PWD/install-root meson install -C ${{ env.BUILD_DIR }} --no-rebuild
-          tar cJvf build-intel.tar.xz -C install-root .
+          tar cJvf build-intel.tar.xz ${{ env.DIST_DIR }}
           echo "BUILD_PACKAGE=build-intel.tar.xz" >> $GITHUB_ENV
 
-      - name: Upload package
+      - name: Upload Intel build artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-intel
