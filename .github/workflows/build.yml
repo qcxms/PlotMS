@@ -80,8 +80,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/intel/oneapi
-          key: install-intel-${{ matrix.version }}-${{ matrix.os }}-2022.1.0-${{ github.run_number }}
-
+          key: install-intel-${{ matrix.version }}-${{ matrix.os }}-2022.1.0-forcefix1
 
       - name: Install Intel oneAPI
         if: matrix.compiler == 'intel' && steps.cache-intel.outputs.cache-hit != 'true'
@@ -93,18 +92,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ env.LINUX_INTEL_COMPONENTS }}
 
-      - name: Source Intel env
-        if: matrix.compiler == 'intel'
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          echo "FC=ifort" >> $GITHUB_ENV
-          echo "CC=icc" >> $GITHUB_ENV
-
-      - name: Install Python deps
+      - name: Install Python packages
         run: pip3 install ${{ env.PIP_PACKAGES }}
 
-      - name: Configure build (Meson)
+      - name: Configure build (Meson) & verify ifort
         run: |
+          if [ "${{ matrix.compiler }}" = "intel" ]; then
+            source /opt/intel/oneapi/setvars.sh
+            which ifort
+            ifort --version
+          fi
           rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
           meson setup ${{ env.BUILD_DIR }} \
             --buildtype=${{ matrix.build-type }} \
@@ -112,6 +109,12 @@ jobs:
             --libdir=lib \
             --warnlevel=0 \
             ${{ matrix.compiler == 'intel' && '-Dfortran_link_args=-qopenmp' || '' }}
+
+      - name: Dump Meson log on failure
+        if: failure()
+        run: |
+          echo "=== Meson full log ==="
+          cat ${{ env.BUILD_DIR }}/meson-logs/meson-log.txt
 
       - name: Build
         run: ninja -C ${{ env.BUILD_DIR }}
