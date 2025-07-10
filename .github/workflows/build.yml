@@ -4,18 +4,20 @@ on: [push, pull_request]
 
 env:
   BUILD_DIR: _build
-  DIST_DIR: _dist
   PIP_PACKAGES: >-
     meson==0.58.0
     cmake
     ninja
     gcovr
+  MACOS_BASEKIT_URL: >-
+    https://registrationcenter-download.intel.com/akdlm/irc_nas/17969/m_BaseKit_p_2021.3.0.3043.dmg
+  MACOS_HPCKIT_URL: >-
+    https://registrationcenter-download.intel.com/akdlm/irc_nas/17890/m_HPCKit_p_2021.3.0.3226_offline.dmg
   LINUX_INTEL_COMPONENTS: >-
-    intel-oneapi-compiler-fortran-2022.1.0
-    intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2022.1.0
-    intel-oneapi-mkl-2022.1.0
-    intel-oneapi-mkl-devel-2022.1.0
-
+    intel-oneapi-compiler-fortran
+    intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic
+    intel-oneapi-mkl
+    intel-oneapi-mkl-devel
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -27,114 +29,199 @@ jobs:
         build-type: [debug]
         compiler: [intel]
         version: [2021]
+
         include:
           - os: ubuntu-latest
             build: meson
             build-type: debug
             compiler: gnu
             version: 11
+
           - os: ubuntu-latest
             build: meson
             build-type: debug
             compiler: gnu
             version: 9
 
+    env:
+      FC: ${{ matrix.compiler == 'intel' && 'ifort' || 'gfortran' }}
+      CC: ${{ matrix.compiler == 'intel' && 'icc' || 'gcc' }}
+      GCC_V: ${{ matrix.version }}
+      OMP_NUM_THREADS: 1,2,1
+      PYTHON_V: 3.8
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
+    - uses: actions/setup-python@v4
       with:
-        python-version: 3.8
+        python-version: ${{ env.PYTHON_V }}
 
-    - name: Install GCC (Linux, GNU)
-      if: matrix.compiler == 'gnu'
+    - name: Install GCC (OSX)
+      if: ${{ contains(matrix.os, 'macos') && matrix.compiler == 'gnu' }}
       run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+          brew install gcc@${{ env.GCC_V }}
+          ln -s /usr/local/bin/gfortran-${GCC_V} /usr/local/bin/gfortran
+          which gfortran-${GCC_V}
+          which gfortran
+    - name: Install GCC (Linux)
+      if: ${{ contains(matrix.os, 'ubuntu') && matrix.compiler == 'gnu' }}
+      run: |
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
         sudo apt-get update
-        sudo apt-get install -y gcc-${{ matrix.version }} gfortran-${{ matrix.version }}
+        sudo apt-get install -y gcc-${{ env.GCC_V}} gfortran-${{ env.GCC_V }}
         sudo update-alternatives \
-          --install /usr/bin/gcc gcc /usr/bin/gcc-${{ matrix.version }} 100 \
-          --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-${{ matrix.version }}
-
-    - name: Prepare Intel cache
-      if: matrix.compiler == 'intel'
+        --install /usr/bin/gcc gcc /usr/bin/gcc-${{ env.GCC_V }} 100 \
+        --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-${{ env.GCC_V }} \
+        --slave /usr/bin/gcov gcov /usr/bin/gcov-${{ env.GCC_V }}
+    - name: Install GCC (Windows)
+      if: ${{ contains(matrix.os, 'windows') && matrix.compiler == 'gnu' }}
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: false
+        install: >-
+          git
+          mingw-w64-x86_64-gcc-fortran
+          mingw-w64-x86_64-openblas
+          mingw-w64-x86_64-lapack
+          mingw-w64-x86_64-cmake
+          mingw-w64-x86_64-meson
+          mingw-w64-x86_64-ninja
+    - name: Prepare for cache restore
+      if: ${{ matrix.compiler == 'intel' }}
       run: |
         sudo mkdir -p /opt/intel
         sudo chown $USER /opt/intel
-
     - name: Cache Intel install
-      if: matrix.compiler == 'intel'
+      if: ${{ matrix.compiler == 'intel' }}
       id: cache-install
       uses: actions/cache@v4
       with:
         path: /opt/intel/oneapi
-        key: install-intel-${{ matrix.os }}-2022.1.0-fix
+        key: install-${{ matrix.compiler }}-${{ matrix.version }}-${{ matrix.os }}
 
-    - name: Install Intel oneAPI
-      if: matrix.compiler == 'intel' && steps.cache-install.outputs.cache-hit != 'true'
+    - name: Install Intel (Linux)
+      if: ${{ contains(matrix.os, 'ubuntu') && contains(matrix.compiler, 'intel') && steps.cache-install.outputs.cache-hit != 'true' }}
       run: |
-        wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
-        sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
-        rm GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
+        wget https://apt.repos.intel.com/intel-gpg-keys/${{ env.KEY }}
+        sudo apt-key add ${{ env.KEY }}
+        rm ${{ env.KEY }}
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt-get update
-        sudo apt-get install -y ${{ env.LINUX_INTEL_COMPONENTS }}
+        sudo apt-get install ${{ env.PKG }}
+      env:
+        KEY: GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
+        PKG: ${{ env.LINUX_INTEL_COMPONENTS }}
 
-    - name: Install Python packages
-      run: pip3 install ${{ env.PIP_PACKAGES }}
-
-    - name: Debug compilers
+    - name: Install Intel BaseKit (OSX)
+      if: ${{ contains(matrix.os, 'macos') && contains(matrix.compiler, 'intel') && steps.cache-install.outputs.cache-hit != 'true' }}
       run: |
-        echo "PATH=$PATH"
-        if [ "${{ matrix.compiler }}" = "intel" ]; then
-          source /opt/intel/oneapi/setvars.sh
-          echo "==== ifort location ===="
-          which ifort || echo "ifort NOT found"
-          ifort --version || echo "ifort failed"
-          echo "==== icc location ===="
-          which icc || echo "icc NOT found"
-          icc --version || echo "icc failed"
+        curl --output ${{ env.OUT }} --url "$URL" --retry 5 --retry-delay 5
+        hdiutil attach ${{ env.OUT }}
+        if [ -z "$COMPONENTS" ]; then
+          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --eula=accept --continue-with-optional-error=yes --log-dir=.
+          installer_exit_code=$?
         else
-          echo "==== gfortran location ===="
-          which gfortran
-          gfortran --version
+          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --components="$COMPONENTS" --eula=accept --continue-with-optional-error=yes --log-dir=.
+          installer_exit_code=$?
         fi
+        hdiutil detach /Volumes/"$(basename "$URL" .dmg)" -quiet
+        exit $installer_exit_code
+      env:
+        OUT: webimage-base.dmg
+        URL: ${{ env.MACOS_BASEKIT_URL }}
+        COMPONENTS: intel.oneapi.mac.mkl.devel
 
-    - name: Configure build (Meson)
+    - name: Install Intel HPCKit (OSX)
+      if: ${{ contains(matrix.os, 'macos') && contains(matrix.compiler, 'intel') && steps.cache-install.outputs.cache-hit != 'true' }}
       run: |
-        if [ "${{ matrix.compiler }}" = "intel" ]; then
-          source /opt/intel/oneapi/setvars.sh
+        curl --output ${{ env.OUT }} --url "$URL" --retry 5 --retry-delay 5
+        hdiutil attach ${{ env.OUT }}
+        if [ -z "$COMPONENTS" ]; then
+          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --eula=accept --continue-with-optional-error=yes --log-dir=.
+          installer_exit_code=$?
+        else
+          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --components="$COMPONENTS" --eula=accept --continue-with-optional-error=yes --log-dir=.
+          installer_exit_code=$?
         fi
-        rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
-        meson setup ${{ env.BUILD_DIR }} \
-          --buildtype=${{ matrix.build-type }} \
-          --prefix=$PWD/${{ env.DIST_DIR }} \
-          --libdir=lib \
-          --warnlevel=0 \
-          ${{ matrix.compiler == 'intel' && '-Dfortran_link_args=-qopenmp' || '' }}
+        hdiutil detach /Volumes/"$(basename "$URL" .dmg)" -quiet
+        exit $installer_exit_code
+      env:
+        OUT: webimage-hpc.dmg
+        URL: ${{ env.MACOS_HPCKIT_URL }}
+        COMPONENTS: all
 
-    - name: Dump Meson log on failure
-      if: failure()
+    - name: Setup Intel oneAPI environment
+      if: ${{ matrix.compiler == 'intel' }}
       run: |
-        echo "=== Meson full log ==="
-        cat ${{ env.BUILD_DIR }}/meson-logs/meson-log.txt || echo "No Meson log found"
+        source /opt/intel/oneapi/setvars.sh
+        printenv >> $GITHUB_ENV
+    - name: Install build and test dependencies
+      if: ${{ ! contains(matrix.os, 'windows') }}
+      run: pip3 install ${{ env.PIP_PACKAGES }} ${{ env.PIP_EXTRAS }}
 
-    - name: Build
+    - name: Configure build (meson)
+      if: ${{ matrix.build == 'meson' }}
+      run: >-
+        meson setup ${{ env.BUILD_DIR }}
+        --buildtype=debug
+        --prefix=$PWD/_dist
+        --libdir=lib
+        --warnlevel=0
+        -Db_coverage=${{ env.COVERAGE }}
+        ${{ env.MESON_ARGS }}
+      env:
+        COVERAGE: ${{ matrix.build-type == 'coverage' }}
+        MESON_ARGS: ${{ matrix.compiler == 'intel' && '-Dfortran_link_args=-qopenmp' || '' }}
+
+    - name: Configure build (CMake)
+      if: ${{ matrix.build == 'cmake' }}
+      run: >-
+        cmake -B${{ env.BUILD_DIR }}
+        -GNinja
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_INSTALL_PREFIX=$PWD/_dist
+        -DCMAKE_INSTALL_LIBDIR=lib
+    - name: Build library
       run: ninja -C ${{ env.BUILD_DIR }}
 
-    - name: Test
-      run: meson test -C ${{ env.BUILD_DIR }} --print-errorlogs --no-rebuild --num-processes 1 -t 2
+    - name: Run unit tests
+      if: ${{ matrix.build == 'meson' }}
+      run: |
+         meson test -C ${{ env.BUILD_DIR }} --print-errorlogs --no-rebuild --num-processes 1 -t 2
+    - name: Run unit tests
+      if: ${{ matrix.build == 'cmake' }}
+      run: |
+         ctest --output-on-failure --parallel 2
+      working-directory: ${{ env.BUILD_DIR }}
 
-    - name: Install
-      run: meson install -C ${{ env.BUILD_DIR }} --no-rebuild
+    - name: Create coverage report
+      if: ${{ matrix.build == 'meson' && matrix.build-type == 'coverage' }}
+      run:
+         ninja -C ${{ env.BUILD_DIR }} coverage
 
-    - name: Package
-      run: tar cJvf plotms-${{ matrix.compiler }}-${{ matrix.version }}.tar.xz -C ${{ env.DIST_DIR }} .
+    - name: Install project
+      run: |
+        ninja -C ${{ env.BUILD_DIR }} install
+        echo "PLOTMS_PREFIX=$PWD/_dist" >> $GITHUB_ENV
+    - name: Create package
+      if: ${{ matrix.build == 'meson' }}
+      run: |
+        tar cvf ${{ env.OUTPUT }} _dist
+        xz -T0 ${{ env.OUTPUT }}
+        echo "PLOTMS_OUTPUT=${{ env.OUTPUT }}.xz" >> $GITHUB_ENV
+      env:
+        OUTPUT: plotms-${{ matrix.compiler }}-${{ matrix.version }}-${{ matrix.os }}.tar
 
-    - name: Upload Artifact
+    - name: Upload package
+      if: ${{ matrix.build == 'meson' && matrix.build-type != 'coverage' }}
       uses: actions/upload-artifact@v4
       with:
-        name: plotms-${{ matrix.compiler }}-${{ matrix.version }}
-        path: plotms-${{ matrix.compiler }}-${{ matrix.version }}.tar.xz
+        name: ${{ env.PLOTMS_OUTPUT }}
+        path: ${{ env.PLOTMS_OUTPUT }}
+
+    - name: Upload coverage report
+      if: ${{ matrix.build == 'meson' && matrix.build-type == 'coverage' }}
+      uses: codecov/codecov-action@v4
