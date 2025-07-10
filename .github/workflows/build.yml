@@ -80,7 +80,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/intel/oneapi
-          key: install-intel-${{ matrix.version }}-${{ matrix.os }}-2022.1.0
+          key: install-intel-${{ matrix.version }}-${{ matrix.os }}-2022.1.0-${{ github.run_number }}
+
 
       - name: Install Intel oneAPI
         if: matrix.compiler == 'intel' && steps.cache-intel.outputs.cache-hit != 'true'
