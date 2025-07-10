@@ -51,13 +51,8 @@ jobs:
       PYTHON_V: 3.8
 
     steps:
-    - name: Checkout code (with submodules)
+    - name: Checkout code 
       uses: actions/checkout@v4
-      with:
-          submodules: recursive
-    - name: Prepare Meson subprojects
-      run: |
-        meson subprojects download
       
 
     - uses: actions/setup-python@v4
