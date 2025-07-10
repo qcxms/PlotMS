@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 env:
   BUILD_DIR: _build
+  DIST_DIR: _dist
   PIP_PACKAGES: >-
     meson==0.58.0
     cmake
@@ -30,14 +31,12 @@ jobs:
         build-type: [debug]
         compiler: [intel]
         version: [2021]
-
         include:
           - os: ubuntu-latest
             build: meson
             build-type: debug
             compiler: gnu
             version: 11
-
           - os: ubuntu-latest
             build: meson
             build-type: debug
@@ -48,107 +47,87 @@ jobs:
       FC: ${{ matrix.compiler == 'intel' && 'ifort' || 'gfortran' }}
       CC: ${{ matrix.compiler == 'intel' && 'icc' || 'gcc' }}
       GCC_V: ${{ matrix.version }}
-      OMP_NUM_THREADS: 1,2,1
       PYTHON_V: 3.8
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_V }}
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_V }}
 
-    - name: Install GCC (OSX)
-      if: ${{ contains(matrix.os, 'macos') && matrix.compiler == 'gnu' }}
-      run: |
-          brew install gcc@${{ env.GCC_V }}
-          ln -s /usr/local/bin/gfortran-${GCC_V} /usr/local/bin/gfortran
-          which gfortran-${GCC_V}
-          which gfortran
+      - name: Install GCC (Linux, GNU)
+        if: matrix.compiler == 'gnu'
+        run: |
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+          sudo apt-get update
+          sudo apt-get install -y gcc-${{ env.GCC_V }} gfortran-${{ env.GCC_V }}
+          sudo update-alternatives \
+            --install /usr/bin/gcc gcc /usr/bin/gcc-${{ env.GCC_V }} 100 \
+            --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-${{ env.GCC_V }}
 
-    - name: Install GCC (Linux)
-      if: ${{ contains(matrix.os, 'ubuntu') && matrix.compiler == 'gnu' }}
-      run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-        sudo apt-get update
-        sudo apt-get install -y gcc-${{ env.GCC_V }} gfortran-${{ env.GCC_V }}
-        sudo update-alternatives \
-        --install /usr/bin/gcc gcc /usr/bin/gcc-${{ env.GCC_V }} 100 \
-        --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-${{ env.GCC_V }} \
-        --slave /usr/bin/gcov gcov /usr/bin/gcov-${{ env.GCC_V }}
+      - name: Prepare Intel cache
+        if: matrix.compiler == 'intel'
+        run: |
+          sudo mkdir -p /opt/intel
+          sudo chown $USER /opt/intel
 
-    - name: Install GCC (Windows)
-      if: ${{ contains(matrix.os, 'windows') && matrix.compiler == 'gnu' }}
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: MINGW64
-        update: false
-        install: >-
-          git
-          mingw-w64-x86_64-gcc-fortran
-          mingw-w64-x86_64-openblas
-          mingw-w64-x86_64-lapack
-          mingw-w64-x86_64-cmake
-          mingw-w64-x86_64-meson
-          mingw-w64-x86_64-ninja
+      - name: Cache Intel install
+        id: cache-intel
+        if: matrix.compiler == 'intel'
+        uses: actions/cache@v4
+        with:
+          path: /opt/intel/oneapi
+          key: install-intel-${{ matrix.version }}-${{ matrix.os }}-2022.1.0
 
-    - name: Prepare for cache restore
-      if: ${{ matrix.compiler == 'intel' }}
-      run: |
-        sudo mkdir -p /opt/intel
-        sudo chown $USER /opt/intel
+      - name: Install Intel oneAPI
+        if: matrix.compiler == 'intel' && steps.cache-intel.outputs.cache-hit != 'true'
+        run: |
+          wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
+          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
+          rm GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
+          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.LINUX_INTEL_COMPONENTS }}
 
-    - name: Cache Intel install
-      if: ${{ matrix.compiler == 'intel' }}
-      id: cache-install
-      uses: actions/cache@v4
-      with:
-        path: /opt/intel/oneapi
-        key: install-${{ matrix.compiler }}-${{ matrix.version }}-${{ matrix.os }}-2022.1.0
+      - name: Source Intel env
+        if: matrix.compiler == 'intel'
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          echo "FC=ifort" >> $GITHUB_ENV
+          echo "CC=icc" >> $GITHUB_ENV
 
-    - name: Install Intel (Linux)
-      if: ${{ contains(matrix.os, 'ubuntu') && contains(matrix.compiler, 'intel') && steps.cache-install.outputs.cache-hit != 'true' }}
-      run: |
-        wget https://apt.repos.intel.com/intel-gpg-keys/${{ env.KEY }}
-        sudo apt-key add ${{ env.KEY }}
-        rm ${{ env.KEY }}
-        echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-        sudo apt-get update
-        sudo apt-get install ${{ env.PKG }}
-      env:
-        KEY: GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
-        PKG: ${{ env.LINUX_INTEL_COMPONENTS }}
+      - name: Install Python deps
+        run: pip3 install ${{ env.PIP_PACKAGES }}
 
-    - name: Install Intel BaseKit (OSX)
-      if: ${{ contains(matrix.os, 'macos') && matrix.compiler == 'intel' && steps.cache-install.outputs.cache-hit != 'true' }}
-      run: |
-        curl --output ${{ env.OUT }} --url "$URL" --retry 5 --retry-delay 5
-        hdiutil attach ${{ env.OUT }}
-        if [ -z "$COMPONENTS" ]; then
-          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --eula=accept --continue-with-optional-error=yes --log-dir=.
-          installer_exit_code=$?
-        else
-          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --components="$COMPONENTS" --eula=accept --continue-with-optional-error=yes --log-dir=.
-          installer_exit_code=$?
-        fi
-        hdiutil detach /Volumes/"$(basename "$URL" .dmg)" -quiet
-        exit $installer_exit_code
-      env:
-        OUT: webimage-base.dmg
-        URL: ${{ env.MACOS_BASEKIT_URL }}
-        COMPONENTS: intel.oneapi.mac.mkl.devel
+      - name: Configure build (Meson)
+        run: |
+          rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
+          meson setup ${{ env.BUILD_DIR }} \
+            --buildtype=${{ matrix.build-type }} \
+            --prefix=$PWD/${{ env.DIST_DIR }} \
+            --libdir=lib \
+            --warnlevel=0 \
+            ${{ matrix.compiler == 'intel' && '-Dfortran_link_args=-qopenmp' || '' }}
 
-    - name: Install Intel HPCKit (OSX)
-      if: ${{ contains(matrix.os, 'macos') && matrix.compiler == 'intel' && steps.cache-install.outputs.cache-hit != 'true' }}
-      run: |
-        curl --output ${{ env.OUT }} --url "$URL" --retry 5 --retry-delay 5
-        hdiutil attach ${{ env.OUT }}
-        if [ -z "$COMPONENTS" ]; then
-          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --eula=accept --continue-with-optional-error=yes --log-dir=.
-          installer_exit_code=$?
-        else
-          sudo /Volumes/"$(basename "$URL" .dmg)"/bootstrapper.app/Contents/MacOS/bootstrapper -s --action install --components="$COMPONENTS" --eula=accept --continue-with-optional-error=yes --log-dir=.
-          installer_exit_code=$?
-        fi
-        hdiutil detach /Volumes/
+      - name: Build
+        run: ninja -C ${{ env.BUILD_DIR }}
+
+      - name: Test
+        run: |
+          meson test -C ${{ env.BUILD_DIR }} --print-errorlogs --no-rebuild --num-processes 1 -t 2
+
+      - name: Install
+        run: meson install -C ${{ env.BUILD_DIR }} --no-rebuild
+
+      - name: Package
+        run: |
+          tar cJvf plotms-${{ matrix.compiler }}-${{ matrix.version }}.tar.xz -C ${{ env.DIST_DIR }} .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plotms-${{ matrix.compiler }}-${{ matrix.version }}
+          path: plotms-${{ matrix.compiler }}-${{ matrix.version }}.tar.xz
