@@ -5,12 +5,27 @@ on: [push, pull_request]
 env:
   BUILD_DIR: _build
   DIST_DIR: _dist
+  PIP_PACKAGES: >-
+    meson==0.58.0
+    ninja
+    gcovr
+  MACOS_BASEKIT_URL: >-
+    https://registrationcenter-download.intel.com/akdlm/irc_nas/17969/m_BaseKit_p_2021.3.0.3043.dmg
+  MACOS_HPCKIT_URL: >-
+    https://registrationcenter-download.intel.com/akdlm/irc_nas/17890/m_HPCKit_p_2021.3.0.3226_offline.dmg
+  LINUX_INTEL_COMPONENTS: >-
+    intel-oneapi-compiler-fortran
+    intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic
+    intel-oneapi-mkl
+    intel-oneapi-mkl-devel
 
 jobs:
+  # GNU Fortran + Meson on Linux, macOS, Windows
   gcc-meson-build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         fc: [gfortran-12]
         cc: [gcc-12]
     env:
@@ -26,17 +41,39 @@ jobs:
         with:
           python-version: 3.x
 
-      - name: Install GCC & dependencies
+      - name: Install GCC & dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.fc }} ${{ matrix.cc }} libopenblas-dev
           echo "FC=${{ matrix.fc }}" >> $GITHUB_ENV
           echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
 
-      - name: Install Meson & Ninja
-        run: pip install meson ninja
+      - name: Install GCC & dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install gcc@12
+          ln -s /usr/local/bin/gfortran-12 /usr/local/bin/gfortran
+          echo "FC=gfortran" >> $GITHUB_ENV
+          echo "CC=gcc-12" >> $GITHUB_ENV
 
-      - name: Configure build (Meson – GNU)
+      - name: Install GCC & dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc-fortran
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-meson
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-openblas
+
+      - name: Install Meson & Ninja
+        run: pip install --upgrade --user meson ninja
+
+      - name: Configure Meson build (GNU)
         run: |
           rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
           meson setup ${{ env.BUILD_DIR }} \
@@ -45,7 +82,7 @@ jobs:
             --libdir=lib \
             --warnlevel=0
 
-      - name: Build project
+      - name: Build
         run: ninja -C ${{ env.BUILD_DIR }}
 
       - name: Install into _dist
@@ -53,29 +90,27 @@ jobs:
 
       - name: Package GNU build
         run: |
-          tar cJvf build-gnu.tar.xz ${{ env.DIST_DIR }}
-          echo "BUILD_PACKAGE=build-gnu.tar.xz" >> $GITHUB_ENV
+          tar cJvf build-gnu-${{ matrix.os }}.tar.xz ${{ env.DIST_DIR }}
+          echo "BUILD_PACKAGE=build-gnu-${{ matrix.os }}.tar.xz" >> $GITHUB_ENV
 
       - name: Upload GNU build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-gnu
-          path: build-gnu.tar.xz
+          name: build-gnu-${{ matrix.os }}
+          path: build-gnu-${{ matrix.os }}.tar.xz
 
+  # Intel oneAPI + Meson on Linux & macOS
   intel-meson-build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         fc: [ifort]
         cc: [icc]
     env:
       FC: ${{ matrix.fc }}
       CC: ${{ matrix.cc }}
-      APT_PACKAGES: >-
-        intel-oneapi-compiler-fortran-2022.1.0
-        intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2022.1.0
-        intel-oneapi-mkl-2022.1.0
-        intel-oneapi-mkl-devel-2022.1.0
+      APT_PACKAGES: ${{ env.LINUX_INTEL_COMPONENTS }}
 
     steps:
       - name: Checkout code
@@ -87,24 +122,39 @@ jobs:
           python-version: 3.x
 
       - name: Install Meson & Ninja
-        run: pip install meson ninja
+        run: pip install --upgrade --user meson ninja
 
-      - name: Add Intel oneAPI APT repo
+      - name: Install Intel oneAPI (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
           sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
           rm GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
           echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
           sudo apt-get update
-
-      - name: Install Intel compilers & MKL
-        run: |
-          sudo apt-get install -y ${APT_PACKAGES}
+          sudo apt-get install -y ${{ env.APT_PACKAGES }}
           source /opt/intel/oneapi/setvars.sh
           echo "FC=ifort" >> $GITHUB_ENV
           echo "CC=icc" >> $GITHUB_ENV
 
-      - name: Configure build (Meson – Intel)
+      - name: Install Intel oneAPI (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          curl --output base.dmg --url "$MACOS_BASEKIT_URL"
+          hdiutil attach base.dmg
+          sudo /Volumes/m_BaseKit_p_*/bootstrapper.app/Contents/MacOS/bootstrapper \
+            -s --action install --components=intel.oneapi.mac.mkl.devel --eula=accept --log-dir=.
+          hdiutil detach /Volumes/m_BaseKit_p_*
+          curl --output hpc.dmg --url "$MACOS_HPCKIT_URL"
+          hdiutil attach hpc.dmg
+          sudo /Volumes/m_HPCKit_p_*/bootstrapper.app/Contents/MacOS/bootstrapper \
+            -s --action install --components=all --eula=accept --log-dir=.
+          hdiutil detach /Volumes/m_HPCKit_p_*
+          source /opt/intel/oneapi/setvars.sh
+          echo "FC=ifort" >> $GITHUB_ENV
+          echo "CC=icc" >> $GITHUB_ENV
+
+      - name: Configure Meson build (Intel)
         run: |
           rm -rf ${{ env.BUILD_DIR }} ${{ env.DIST_DIR }}
           source /opt/intel/oneapi/setvars.sh
@@ -116,7 +166,7 @@ jobs:
             -Dfortran_link_args="-lifcoremt -static" \
             -Ddefault_library=static
 
-      - name: Build project
+      - name: Build
         run: ninja -C ${{ env.BUILD_DIR }}
 
       - name: Install into _dist
@@ -124,11 +174,11 @@ jobs:
 
       - name: Package Intel build
         run: |
-          tar cJvf build-intel.tar.xz ${{ env.DIST_DIR }}
-          echo "BUILD_PACKAGE=build-intel.tar.xz" >> $GITHUB_ENV
+          tar cJvf build-intel-${{ matrix.os }}.tar.xz ${{ env.DIST_DIR }}
+          echo "BUILD_PACKAGE=build-intel-${{ matrix.os }}.tar.xz" >> $GITHUB_ENV
 
       - name: Upload Intel build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-intel
-          path: build-intel.tar.xz
+          name: build-intel-${{ matrix.os }}
+          path: build-intel-${{ matrix.os }}.tar.xz
