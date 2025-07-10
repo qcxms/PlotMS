@@ -14,11 +14,10 @@ env:
   MACOS_HPCKIT_URL: >-
     https://registrationcenter-download.intel.com/akdlm/irc_nas/17890/m_HPCKit_p_2021.3.0.3226_offline.dmg
   LINUX_INTEL_COMPONENTS: >-
-    intel-oneapi-compiler-fortran
-    intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic
-    intel-oneapi-mkl
-    intel-oneapi-mkl-devel
-
+    intel-oneapi-compiler-fortran-2022.1.0
+    intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2022.1.0
+    intel-oneapi-mkl-2022.1.0
+    intel-oneapi-mkl-devel-2022.1.0
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -53,9 +52,9 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
-    - uses: actions/setup-python@v1
+    - uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_V }}
 
@@ -66,7 +65,6 @@ jobs:
           ln -s /usr/local/bin/gfortran-${GCC_V} /usr/local/bin/gfortran
           which gfortran-${GCC_V}
           which gfortran
-
     - name: Install GCC (Linux)
       if: ${{ contains(matrix.os, 'ubuntu') && matrix.compiler == 'gnu' }}
       run: |
@@ -77,7 +75,6 @@ jobs:
         --install /usr/bin/gcc gcc /usr/bin/gcc-${{ env.GCC_V }} 100 \
         --slave /usr/bin/gfortran gfortran /usr/bin/gfortran-${{ env.GCC_V }} \
         --slave /usr/bin/gcov gcov /usr/bin/gcov-${{ env.GCC_V }}
-
     - name: Install GCC (Windows)
       if: ${{ contains(matrix.os, 'windows') && matrix.compiler == 'gnu' }}
       uses: msys2/setup-msys2@v2
@@ -92,17 +89,15 @@ jobs:
           mingw-w64-x86_64-cmake
           mingw-w64-x86_64-meson
           mingw-w64-x86_64-ninja
-
     - name: Prepare for cache restore
       if: ${{ matrix.compiler == 'intel' }}
       run: |
         sudo mkdir -p /opt/intel
         sudo chown $USER /opt/intel
-
     - name: Cache Intel install
       if: ${{ matrix.compiler == 'intel' }}
       id: cache-install
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: /opt/intel/oneapi
         key: install-${{ matrix.compiler }}-${{ matrix.version }}-${{ matrix.os }}
@@ -163,7 +158,6 @@ jobs:
       run: |
         source /opt/intel/oneapi/setvars.sh
         printenv >> $GITHUB_ENV
-
     - name: Install build and test dependencies
       if: ${{ ! contains(matrix.os, 'windows') }}
       run: pip3 install ${{ env.PIP_PACKAGES }} ${{ env.PIP_EXTRAS }}
@@ -190,7 +184,6 @@ jobs:
         -DCMAKE_BUILD_TYPE=Debug
         -DCMAKE_INSTALL_PREFIX=$PWD/_dist
         -DCMAKE_INSTALL_LIBDIR=lib
-
     - name: Build library
       run: ninja -C ${{ env.BUILD_DIR }}
 
@@ -198,7 +191,6 @@ jobs:
       if: ${{ matrix.build == 'meson' }}
       run: |
          meson test -C ${{ env.BUILD_DIR }} --print-errorlogs --no-rebuild --num-processes 1 -t 2
-
     - name: Run unit tests
       if: ${{ matrix.build == 'cmake' }}
       run: |
@@ -214,7 +206,6 @@ jobs:
       run: |
         ninja -C ${{ env.BUILD_DIR }} install
         echo "PLOTMS_PREFIX=$PWD/_dist" >> $GITHUB_ENV
-
     - name: Create package
       if: ${{ matrix.build == 'meson' }}
       run: |
@@ -226,11 +217,11 @@ jobs:
 
     - name: Upload package
       if: ${{ matrix.build == 'meson' && matrix.build-type != 'coverage' }}
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.PLOTMS_OUTPUT }}
         path: ${{ env.PLOTMS_OUTPUT }}
 
     - name: Upload coverage report
       if: ${{ matrix.build == 'meson' && matrix.build-type == 'coverage' }}
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v4
